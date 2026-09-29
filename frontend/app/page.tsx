@@ -12,6 +12,7 @@ import {
   type Health,
   type IncidentRecord,
   type SubmitResult,
+  fetchAreas,
   fetchComplaints,
   fetchHealth,
   fetchIncidents,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/api";
 import { formatDistance, formatGap } from "@/lib/format";
 
-type Coords = { latitude: number; longitude: number; accuracy: number | null };
+type Coords = { latitude: number; longitude: number; accuracy: number | null; area: string | null };
 
 export default function HomePage() {
   const [coords, setCoords] = useState<Coords | null>(null);
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([]);
   const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
+  const [areas, setAreas] = useState<string[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(true);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [misconfigured, setMisconfigured] = useState(false);
@@ -39,15 +41,17 @@ export default function HomePage() {
     setRecordsLoading(true);
     setRecordsError(null);
     try {
-      const [healthBody, complaintBody, incidentBody] = await Promise.all([
+      const [healthBody, complaintBody, incidentBody, areasBody] = await Promise.all([
         fetchHealth(),
         fetchComplaints(nextFilters, nextCoords),
         fetchIncidents(nextFilters, nextCoords),
+        fetchAreas().catch(() => ({ areas: [] as string[] })),
       ]);
       setHealth(healthBody);
       setHealthError(null);
       setComplaints(complaintBody.complaints);
       setIncidents(incidentBody.incidents);
+      setAreas(areasBody.areas);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not load records.";
       setRecordsError(message);
@@ -129,6 +133,7 @@ export default function HomePage() {
             onApply={() => void load(filters, coords)}
             complaints={complaints}
             incidents={incidents}
+            areas={areas}
             loading={recordsLoading}
             error={recordsError}
             coords={coords}

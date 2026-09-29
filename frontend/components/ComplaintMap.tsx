@@ -32,6 +32,7 @@ function tip(item: ComplaintRecord) {
   return `
     <div class="map-tip-body">
       <strong>${escapeHtml(labelize(item.issue_type))}</strong>
+      <span>${escapeHtml(item.area || "Area unknown")}</span>
       <span>${escapeHtml(categoryLabel(item.issue_category))} · ${escapeHtml(item.severity)}</span>
       <p>${escapeHtml(item.description)}</p>
       <small>${escapeHtml(formatWhen(item.timestamp))}</small>

@@ -8,12 +8,12 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPLAINT_COLUMNS = """
 id, original_text, image_path, issue_category, issue_type, issue_subtype,
-severity, description, visual_evidence, confidence, latitude, longitude,
+severity, description, visual_evidence, confidence, latitude, longitude, area,
 timestamp, incident_id, created_at
 """
 
 INCIDENT_COLUMNS = """
-id, issue_category, issue_type, severity, latitude, longitude,
+id, issue_category, issue_type, severity, latitude, longitude, area,
 first_reported_at, last_reported_at, report_count
 """
 
@@ -25,6 +25,7 @@ def list_complaints(
     category: str | None,
     severity: str | None,
     issue_type: str | None,
+    area: str | None,
     date_from: date | None,
     date_to: date | None,
     near_lat: float | None,
@@ -39,7 +40,8 @@ def list_complaints(
         issue_type,
         date_from,
         date_to,
-        text_columns=("original_text", "description", "issue_type", "issue_subtype"),
+        area=area,
+        text_columns=("original_text", "description", "issue_type", "issue_subtype", "area"),
     )
     distance = "NULL::double precision"
     order = "timestamp DESC"
@@ -80,6 +82,7 @@ def list_incidents(
     category: str | None,
     severity: str | None,
     issue_type: str | None,
+    area: str | None,
     date_from: date | None,
     date_to: date | None,
     near_lat: float | None,
@@ -94,7 +97,8 @@ def list_incidents(
         issue_type,
         date_from,
         date_to,
-        text_columns=("issue_type", "issue_category"),
+        area=area,
+        text_columns=("issue_type", "issue_category", "area"),
         time_column="last_reported_at",
     )
     distance = "NULL::double precision"
@@ -138,6 +142,7 @@ def _filters(
     date_to: date | None,
     text_columns: tuple[str, ...],
     time_column: str = "timestamp",
+    area: str | None = None,
 ) -> tuple[list[str], dict]:
     clauses = ["1=1"]
     params: dict = {}
@@ -150,6 +155,9 @@ def _filters(
     if issue_type:
         clauses.append("issue_type ILIKE :issue_type ESCAPE '\\'")
         params["issue_type"] = f"%{_escape_like(issue_type)}%"
+    if area:
+        clauses.append("area = :area")
+        params["area"] = area
     if q:
         like = f"%{_escape_like(q)}%"
         parts = [f"{column} ILIKE :q ESCAPE '\\'" for column in text_columns]
@@ -162,6 +170,22 @@ def _filters(
         clauses.append(f"{time_column} < :date_to_exclusive")
         params["date_to_exclusive"] = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=IST)
     return clauses, params
+
+
+def list_areas(session: Session) -> list[str]:
+    rows = session.execute(
+        text(
+            """
+            SELECT area FROM (
+              SELECT area FROM complaints WHERE area IS NOT NULL AND btrim(area) <> ''
+              UNION
+              SELECT area FROM incidents WHERE area IS NOT NULL AND btrim(area) <> ''
+            ) names
+            ORDER BY area
+            """
+        )
+    ).scalars().all()
+    return [str(row) for row in rows]
 
 
 def _escape_like(value: str) -> str:

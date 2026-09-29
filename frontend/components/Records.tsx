@@ -11,7 +11,7 @@ const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod
   loading: () => <div className="map-frame" role="status">Loading the Mumbai map…</div>,
 });
 
-type Coords = { latitude: number; longitude: number; accuracy: number | null };
+type Coords = { latitude: number; longitude: number; accuracy: number | null; area: string | null };
 
 type Props = {
   filters: Filters;
@@ -19,12 +19,13 @@ type Props = {
   onApply: () => void;
   complaints: ComplaintRecord[];
   incidents: IncidentRecord[];
+  areas: string[];
   loading: boolean;
   error: string | null;
   coords: Coords | null;
 };
 
-export function Records({ filters, onFilters, onApply, complaints, incidents, loading, error, coords }: Props) {
+export function Records({ filters, onFilters, onApply, complaints, incidents, areas, loading, error, coords }: Props) {
   const [tab, setTab] = useState<"complaints" | "incidents">("complaints");
 
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -61,6 +62,18 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
           />
         </label>
         <div className="filter-grid">
+          <label className="field">
+            Area
+            <select value={filters.area} onChange={(event) => update("area", event.target.value)}>
+              <option value="">Any area</option>
+              {areas.map((area) => (
+                <option key={area} value={area}>
+                  {area}
+                </option>
+              ))}
+              {filters.area && !areas.includes(filters.area) && <option value={filters.area}>{filters.area}</option>}
+            </select>
+          </label>
           <label className="field">
             Category
             <select value={filters.category} onChange={(event) => update("category", event.target.value)}>
@@ -145,6 +158,7 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
               <p>{item.description}</p>
               <div className="meta">
                 <span>{formatWhen(item.timestamp)}</span>
+                <span>{item.area || "Area unknown"}</span>
                 <span>
                   {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
                 </span>
@@ -173,6 +187,10 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
               </header>
               <h3>{labelize(item.issue_type)}</h3>
               <div className="meta">
+                <span>{item.area || "Area unknown"}</span>
+                <span>
+                  {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
+                </span>
                 <span>First {formatWhen(item.first_reported_at)}</span>
                 <span>Latest {formatWhen(item.last_reported_at)}</span>
                 {item.distance_m != null && <span>{formatDistance(item.distance_m)} away</span>}

@@ -80,6 +80,10 @@ def init_db() -> None:
                 )
         Base.metadata.create_all(engine)
         with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS area VARCHAR(120)"))
+            connection.execute(text("ALTER TABLE incidents ADD COLUMN IF NOT EXISTS area VARCHAR(120)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_complaints_area ON complaints (area)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_incidents_area ON incidents (area)"))
             connection.execute(
                 text(
                     """

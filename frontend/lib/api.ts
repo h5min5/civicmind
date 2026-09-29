@@ -66,6 +66,7 @@ export type ComplaintRecord = {
   confidence: number;
   latitude: number;
   longitude: number;
+  area: string | null;
   timestamp: string;
   incident_id: string | null;
   created_at: string;
@@ -79,6 +80,7 @@ export type IncidentRecord = {
   severity: string;
   latitude: number;
   longitude: number;
+  area: string | null;
   first_reported_at: string;
   last_reported_at: string;
   report_count: number;
@@ -90,6 +92,7 @@ export type Filters = {
   category: string;
   severity: string;
   issueType: string;
+  area: string;
   dateFrom: string;
   dateTo: string;
   near: boolean;
@@ -101,6 +104,7 @@ export const EMPTY_FILTERS: Filters = {
   category: "",
   severity: "",
   issueType: "",
+  area: "",
   dateFrom: "",
   dateTo: "",
   near: false,
@@ -119,6 +123,7 @@ export function filterQuery(filters: Filters, coords: { latitude: number; longit
   if (filters.category) params.set("category", filters.category);
   if (filters.severity) params.set("severity", filters.severity);
   if (filters.issueType.trim()) params.set("issue_type", filters.issueType.trim());
+  if (filters.area) params.set("area", filters.area);
   if (filters.dateFrom) params.set("date_from", filters.dateFrom);
   if (filters.dateTo) params.set("date_to", filters.dateTo);
   if (filters.near) {
@@ -174,4 +179,16 @@ export function fetchComplaints(filters: Filters, coords: { latitude: number; lo
 export function fetchIncidents(filters: Filters, coords: { latitude: number; longitude: number } | null) {
   const params = filterQuery(filters, coords);
   return request<{ incidents: IncidentRecord[] }>(`/api/incidents?${params.toString()}`);
+}
+
+export function fetchAreas() {
+  return request<{ areas: string[] }>("/api/areas");
+}
+
+export function lookupArea(latitude: number, longitude: number) {
+  const params = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+  });
+  return request<{ area: string | null }>(`/api/geocode?${params.toString()}`);
 }

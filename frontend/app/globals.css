@@ -183,6 +183,11 @@ textarea { min-height: 140px; resize: vertical; }
   background: color-mix(in srgb, var(--gold) 45%, white);
   font-variant-numeric: tabular-nums;
 }
+.coords strong {
+  flex-basis: 100%;
+  color: var(--forest-deep);
+  font-size: 1rem;
+}
 .coords span { color: var(--muted); font-size: 0.82rem; }
 
 .banner, .form-error {

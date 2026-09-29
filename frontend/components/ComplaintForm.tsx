@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { lookupArea } from "@/lib/api";
 import { compressImage } from "@/lib/format";
 
-type Coords = { latitude: number; longitude: number; accuracy: number | null };
+type Coords = { latitude: number; longitude: number; accuracy: number | null; area: string | null };
 
 type Props = {
   submitting: boolean;
@@ -52,12 +53,22 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        onCoords({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
-        setLocating(false);
+        void (async () => {
+          let area: string | null = null;
+          try {
+            const found = await lookupArea(position.coords.latitude, position.coords.longitude);
+            area = found.area;
+          } catch {
+            area = null;
+          }
+          onCoords({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            area,
+          });
+          setLocating(false);
+        })();
       },
       (failure) => {
         setLocating(false);
@@ -147,6 +158,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
         </button>
         {coords && (
           <p className="coords">
+            <strong>{coords.area || "Area name unavailable"}</strong>
             <span>Latitude {coords.latitude.toFixed(5)}</span>
             <span>Longitude {coords.longitude.toFixed(5)}</span>
             {coords.accuracy != null && <span>Accuracy ±{Math.round(coords.accuracy)} m</span>}

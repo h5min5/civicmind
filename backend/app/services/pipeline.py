@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.models import Complaint, Incident
 from app.services.embeddings import get_embedding_client, to_pgvector
+from app.services.geocode import lookup_area
 from app.services.groq_vision import Analysis, semantic_text
 from app.services.matching import Candidate, Decision, Thresholds, evaluate_candidates
 
@@ -30,6 +31,7 @@ def submit_complaint(
         raise RuntimeError("Only accepted complaints can be stored.")
     features = analysis.features
     settings = get_settings()
+    area = lookup_area(latitude, longitude)
     session.execute(text("SELECT pg_advisory_xact_lock(451234)"))
     embedding = get_embedding_client().embed(semantic_text(original_text, features), session)
     session.flush()
@@ -51,6 +53,8 @@ def submit_complaint(
         incident.last_reported_at = timestamp
         if SEVERITY_RANK[features.severity] > SEVERITY_RANK[incident.severity]:
             incident.severity = features.severity
+        if area and not incident.area:
+            incident.area = area
     else:
         incident = Incident(
             id=uuid.uuid4(),
@@ -59,6 +63,7 @@ def submit_complaint(
             severity=features.severity,
             latitude=latitude,
             longitude=longitude,
+            area=area,
             first_reported_at=timestamp,
             last_reported_at=timestamp,
             report_count=1,
@@ -82,6 +87,7 @@ def submit_complaint(
         confidence=features.confidence,
         latitude=latitude,
         longitude=longitude,
+        area=area,
         timestamp=timestamp,
         embedding=embedding,
         incident_id=incident.id,

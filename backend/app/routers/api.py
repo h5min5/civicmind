@@ -9,9 +9,10 @@ from app.config import get_settings
 from app.database import SessionLocal, ping_database, safe_error
 from app.models import Complaint
 from app.services.embeddings import ProviderError, cached_dimension, get_embedding_client
+from app.services.geocode import ensure_areas, lookup_area
 from app.services.groq_vision import analyze_complaint
 from app.services.pipeline import submit_complaint
-from app.services.queries import list_complaints, list_incidents
+from app.services.queries import list_areas, list_complaints, list_incidents
 
 router = APIRouter()
 
@@ -94,12 +95,34 @@ def create_complaint(
         session.close()
 
 
+@router.get("/geocode")
+def geocode(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
+):
+    return {"area": lookup_area(latitude, longitude)}
+
+
+@router.get("/areas")
+def areas():
+    database = ping_database()
+    if not database["ok"]:
+        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
+    session = SessionLocal()
+    try:
+        ensure_areas(session)
+        return {"areas": list_areas(session)}
+    finally:
+        session.close()
+
+
 @router.get("/complaints")
 def complaints(
     q: str | None = None,
     category: str | None = None,
     severity: str | None = None,
     issue_type: str | None = None,
+    area: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     near_lat: float | None = None,
@@ -115,6 +138,7 @@ def complaints(
         raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
     session = SessionLocal()
     try:
+        ensure_areas(session)
         return {
             "complaints": list_complaints(
                 session,
@@ -122,6 +146,7 @@ def complaints(
                 category=_blank(category),
                 severity=_blank(severity),
                 issue_type=_blank(issue_type),
+                area=_blank(area),
                 date_from=date_from,
                 date_to=date_to,
                 near_lat=near_lat,
@@ -140,6 +165,7 @@ def incidents(
     category: str | None = None,
     severity: str | None = None,
     issue_type: str | None = None,
+    area: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     near_lat: float | None = None,
@@ -155,6 +181,7 @@ def incidents(
         raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
     session = SessionLocal()
     try:
+        ensure_areas(session)
         return {
             "incidents": list_incidents(
                 session,
@@ -162,6 +189,7 @@ def incidents(
                 category=_blank(category),
                 severity=_blank(severity),
                 issue_type=_blank(issue_type),
+                area=_blank(area),
                 date_from=date_from,
                 date_to=date_to,
                 near_lat=near_lat,
