@@ -26,6 +26,15 @@ body {
     var(--peach);
 }
 img { max-width: 100%; display: block; }
+.map-frame.leaflet-container .leaflet-tile,
+.map-frame.leaflet-container .leaflet-pane,
+.map-frame.leaflet-container .leaflet-map-pane,
+.map-frame.leaflet-container .leaflet-marker-icon,
+.map-frame.leaflet-container .leaflet-marker-shadow {
+  position: absolute;
+  max-width: none !important;
+  max-height: none !important;
+}
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: var(--forest-deep); }
@@ -228,6 +237,38 @@ textarea { min-height: 140px; resize: vertical; }
 .id-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
 .id-row code { word-break: break-all; font-size: 0.82rem; }
 
+.map-block { display: grid; gap: 8px; margin: 12px 0 16px; }
+.map-frame {
+  height: 320px;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;
+  border: 1px solid var(--line);
+  background: #e7efe4;
+}
+.map-frame .leaflet-container {
+  height: 100%;
+  width: 100%;
+  font-family: inherit;
+  background: #e7efe4;
+}
+.map-legend { display: flex; flex-wrap: wrap; gap: 10px 14px; color: var(--muted); font-size: 0.78rem; font-weight: 650; text-transform: capitalize; }
+.map-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; box-shadow: 0 0 0 2px #fff8f3; }
+.leaflet-tooltip.map-tip {
+  background: #fff8f3;
+  color: #1c2820;
+  border: 1px solid rgba(68, 93, 72, 0.18);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(68, 93, 72, 0.16);
+  padding: 8px 10px;
+}
+.leaflet-tooltip.map-tip::before { border-top-color: #fff8f3; }
+.map-tip-body { display: grid; gap: 2px; max-width: 220px; }
+.map-tip-body strong { font-size: 0.92rem; }
+.map-tip-body span, .map-tip-body small { color: #3e4a43; font-size: 0.75rem; }
+.map-tip-body p { margin: 2px 0 0; font-size: 0.82rem; line-height: 1.35; }
+
 .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .tabs button {
   border: 0;
@@ -265,6 +306,7 @@ details summary { cursor: pointer; color: var(--forest); font-weight: 650; }
   .layout { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); align-items: start; }
   .filter-grid { grid-template-columns: 1fr 1fr; }
   .topbar p { display: block; }
+  .map-frame { height: 380px; }
 }
 
 @media (max-width: 720px) {

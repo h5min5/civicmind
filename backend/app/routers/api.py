@@ -105,7 +105,7 @@ def complaints(
     near_lat: float | None = None,
     near_lng: float | None = None,
     radius_m: float | None = Query(default=None, gt=0, le=20000),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=200),
 ):
     _validate_search(severity, near_lat, near_lng, radius_m)
     if near_lat is not None and radius_m is None:
@@ -145,7 +145,7 @@ def incidents(
     near_lat: float | None = None,
     near_lng: float | None = None,
     radius_m: float | None = Query(default=None, gt=0, le=20000),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=200),
 ):
     _validate_search(severity, near_lat, near_lng, radius_m)
     if near_lat is not None and radius_m is None:

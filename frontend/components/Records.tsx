@@ -1,9 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
 import { imageUrl } from "@/lib/api";
 import { CATEGORIES, SEVERITIES, categoryLabel, formatDistance, formatWhen, labelize, mapLink } from "@/lib/format";
+
+const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod) => mod.ComplaintMap), {
+  ssr: false,
+  loading: () => <div className="map-frame" role="status">Loading the Mumbai map…</div>,
+});
 
 type Coords = { latitude: number; longitude: number; accuracy: number | null };
 
@@ -29,6 +35,7 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
     <section className="card">
       <p className="eyebrow">Already reported</p>
       <h2>Recent complaints and incidents</h2>
+      <ComplaintMap complaints={complaints} />
       <div className="tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "complaints"} onClick={() => setTab("complaints")}>
           Complaints

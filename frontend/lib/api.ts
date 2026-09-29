@@ -127,7 +127,7 @@ export function filterQuery(filters: Filters, coords: { latitude: number; longit
     params.set("near_lng", String(coords.longitude));
     params.set("radius_m", String(filters.radius));
   }
-  params.set("limit", "20");
+  params.set("limit", "50");
   return params;
 }
 
