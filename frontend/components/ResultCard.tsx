@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { SubmitResult } from "@/lib/api";
 import { categoryLabel, formatDistance, formatGap, formatWhen, labelize } from "@/lib/format";
 
@@ -106,6 +107,11 @@ export function ResultCard({ submitting, result, error }: Props) {
             />
           </div>
           <p className="explanation">{result.explanation}</p>
+          {result.accepted && (
+            <p className="quiet">
+              <Link href="/complaints">See it among recent complaints</Link>
+            </p>
+          )}
           {result.timestamp && <p className="quiet">Filed {formatWhen(result.timestamp)} IST</p>}
           {result.embedding_dimensions != null && (
             <p className="quiet">Embedding dimension verified at {result.embedding_dimensions}.</p>

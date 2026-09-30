@@ -5,13 +5,12 @@ import { useState } from "react";
 import type { ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
 import { imageUrl } from "@/lib/api";
 import { CATEGORIES, SEVERITIES, categoryLabel, formatDistance, formatWhen, labelize, mapLink } from "@/lib/format";
+import type { Coords } from "@/lib/locate";
 
 const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod) => mod.ComplaintMap), {
   ssr: false,
   loading: () => <div className="map-frame" role="status">Loading the Mumbai map…</div>,
 });
-
-type Coords = { latitude: number; longitude: number; accuracy: number | null; area: string | null };
 
 type Props = {
   filters: Filters;
@@ -23,9 +22,23 @@ type Props = {
   loading: boolean;
   error: string | null;
   coords: Coords | null;
+  locating: boolean;
+  onLocate: () => void;
 };
 
-export function Records({ filters, onFilters, onApply, complaints, incidents, areas, loading, error, coords }: Props) {
+export function Records({
+  filters,
+  onFilters,
+  onApply,
+  complaints,
+  incidents,
+  areas,
+  loading,
+  error,
+  coords,
+  locating,
+  onLocate,
+}: Props) {
   const [tab, setTab] = useState<"complaints" | "incidents">("complaints");
 
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -35,7 +48,7 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, ar
   return (
     <section className="card">
       <p className="eyebrow">Already reported</p>
-      <h2>Recent complaints and incidents</h2>
+      <h1>Recent complaints and incidents</h1>
       <ComplaintMap complaints={complaints} />
       <div className="tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "complaints"} onClick={() => setTab("complaints")}>
@@ -115,6 +128,9 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, ar
           </label>
         </div>
         <div className="near-row">
+          <button className="button secondary" type="button" onClick={onLocate} disabled={locating || loading}>
+            {locating ? "Finding you…" : "Use my location"}
+          </button>
           <label>
             <input
               type="checkbox"

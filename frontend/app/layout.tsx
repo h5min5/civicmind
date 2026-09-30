@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Fraunces, Outfit } from "next/font/google";
+import { SiteHeader } from "@/components/SiteHeader";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
@@ -22,7 +23,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${outfit.variable} ${fraunces.variable}`}>{children}</body>
+      <body className={`${outfit.variable} ${fraunces.variable}`}>
+        <SiteHeader />
+        {children}
+      </body>
     </html>
   );
 }

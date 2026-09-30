@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { lookupArea } from "@/lib/api";
 import { compressImage } from "@/lib/format";
-
-type Coords = { latitude: number; longitude: number; accuracy: number | null; area: string | null };
+import { readBrowserLocation, type Coords } from "@/lib/locate";
 
 type Props = {
   submitting: boolean;
@@ -44,38 +42,16 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
     }
   }
 
-  function useLocation() {
+  async function useLocation() {
     setError(null);
-    if (!navigator.geolocation) {
-      setError("This browser does not provide location.");
-      return;
-    }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void (async () => {
-          let area: string | null = null;
-          try {
-            const found = await lookupArea(position.coords.latitude, position.coords.longitude);
-            area = found.area;
-          } catch {
-            area = null;
-          }
-          onCoords({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            area,
-          });
-          setLocating(false);
-        })();
-      },
-      (failure) => {
-        setLocating(false);
-        setError(failure.message || "Location permission was denied.");
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
-    );
+    try {
+      onCoords(await readBrowserLocation());
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Location permission was denied.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -153,7 +129,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
       </div>
       <div className="field">
         <span>Location</span>
-        <button className="button secondary" type="button" onClick={useLocation} disabled={locating || submitting}>
+        <button className="button secondary" type="button" onClick={() => void useLocation()} disabled={locating || submitting}>
           {locating ? "Finding you…" : "Use my location"}
         </button>
         {coords && (
