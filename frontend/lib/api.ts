@@ -78,6 +78,7 @@ export type ComplaintRecord = {
   severity_score: number | null;
   priority: string | null;
   department: string | null;
+  area?: string | null;
   routing_reason: string | null;
   status: string;
   matched_existing: boolean;

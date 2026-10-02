@@ -88,17 +88,10 @@ export default function AuthorityDashboardPage() {
 
   return (
     <main className="page">
-      <header className="topbar" style={{ marginBottom: 16 }}>
-        <div className="brand">
-          <div className="mark" aria-hidden="true" />
-          <div>
-            <p className="place">Mumbai</p>
-            <h1 className="wordmark">Authority Dashboard</h1>
-          </div>
-        </div>
-        <a href="/" className="topbar-link">Back to complaints</a>
-      </header>
-
+      <section className="intro">
+        <h1>Authority dashboard</h1>
+        <p>Prioritize civic work, review department queues, and move complaints through resolution.</p>
+      </section>
       <div className="dashboard-shell">
         <section className="card">
           <p className="eyebrow">Overview</p>

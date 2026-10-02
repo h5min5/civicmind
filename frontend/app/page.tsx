@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ComplaintForm } from "@/components/ComplaintForm";
+import { Features } from "@/components/Features";
 import { Records } from "@/components/Records";
 import { ResultCard } from "@/components/ResultCard";
 import {
@@ -89,19 +90,6 @@ export default function HomePage() {
 
   return (
     <>
-      <header className="topbar">
-        <div className="brand">
-          <div className="mark" aria-hidden="true" />
-          <div>
-            <p className="place">Mumbai</p>
-            <h1 className="wordmark">CivicMind</h1>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <a href="/authority" className="topbar-link">Authority dashboard</a>
-          <p>Complaint intelligence for streets, drains, waste, and public works.</p>
-        </div>
-      </header>
       <main className="page">
         <section className="intro">
           <h2>Report what the street actually looks like.</h2>
@@ -137,6 +125,7 @@ export default function HomePage() {
             coords={coords}
           />
         </div>
+        <Features />
         <footer className="footer">
           {rule
             ? `A report joins an existing incident only when semantic similarity is at least ${rule.semantic_similarity.toFixed(2)}, distance is within ${formatDistance(rule.geo_radius_meters)}, and the time gap is within ${formatGap(rule.time_window_hours)}.`
