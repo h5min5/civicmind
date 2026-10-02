@@ -10,7 +10,7 @@ const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces" });
 
 export const metadata: Metadata = {
   title: "CivicMind",
-  description: "AI civic complaint intelligence for Mumbai",
+  description: "AI civic complaint intelligence for communities",
   applicationName: "CivicMind",
 };
 

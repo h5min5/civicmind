@@ -135,7 +135,7 @@ export function ComplaintMap({ complaints }: { complaints: ComplaintRecord[] }) 
 
   return (
     <div className="map-block">
-      <div ref={host} className="map-frame" role="region" aria-label="Complaints in Mumbai" />
+      <div ref={host} className="map-frame" role="region" aria-label="Complaint locations" />
       <div className="map-legend" aria-hidden="true">
         {Object.entries(SEVERITY_COLOR).map(([severity, color]) => (
           <span key={severity}>
@@ -144,7 +144,7 @@ export function ComplaintMap({ complaints }: { complaints: ComplaintRecord[] }) 
           </span>
         ))}
       </div>
-      <p className="hint">Pan and zoom across Mumbai. Hover or tap a point to read the issue.</p>
+      <p className="hint">Pan and zoom across the map. Hover or tap a point to read the issue.</p>
     </div>
   );
 }

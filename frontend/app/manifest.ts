@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "CivicMind",
     short_name: "CivicMind",
-    description: "Civic complaint intelligence for Mumbai",
+    description: "Civic complaint intelligence for communities",
     start_url: "/",
     display: "standalone",
     background_color: "#FDE5D4",

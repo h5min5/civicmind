@@ -17,7 +17,7 @@ export function SiteHeader() {
       <Link href="/" className="brand">
         <div className="mark" aria-hidden="true" />
         <div>
-          <p className="place">Mumbai</p>
+          <p className="place">Civic platform</p>
           <p className="wordmark">CivicMind</p>
         </div>
       </Link>
