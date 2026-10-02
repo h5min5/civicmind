@@ -8,7 +8,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPLAINT_COLUMNS = """
 id, original_text, image_path, issue_category, issue_type, issue_subtype,
-severity, description, visual_evidence, confidence, latitude, longitude,
+severity, severity_score, priority, department, routing_reason, status,
+matched_existing, description, visual_evidence, confidence, latitude, longitude,
 timestamp, incident_id, created_at
 """
 

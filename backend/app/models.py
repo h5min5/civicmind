@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -47,6 +48,9 @@ class Complaint(Base):
     __table_args__ = (
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="ck_complaint_confidence"),
         CheckConstraint("severity IN ('low','medium','high','critical')", name="ck_complaint_severity"),
+        CheckConstraint("priority IN ('low','medium','high','critical')", name="ck_complaint_priority"),
+        CheckConstraint("status IN ('submitted','assigned','in_progress','resolved','closed')", name="ck_complaint_status"),
+        CheckConstraint("severity_score >= 0 AND severity_score <= 10", name="ck_complaint_severity_score"),
         CheckConstraint("latitude BETWEEN -90 AND 90", name="ck_complaint_lat"),
         CheckConstraint("longitude BETWEEN -180 AND 180", name="ck_complaint_lng"),
         Index("ix_complaints_timestamp", "timestamp"),
@@ -58,9 +62,15 @@ class Complaint(Base):
     image_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     image_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     issue_category: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    issue_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    issue_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     issue_subtype: Mapped[str] = mapped_column(String(80), nullable=False)
     severity: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    severity_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    priority: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    department: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    routing_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="submitted", index=True)
+    matched_existing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     visual_evidence: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)

@@ -97,7 +97,10 @@ export default function HomePage() {
             <h1 className="wordmark">CivicMind</h1>
           </div>
         </div>
-        <p>Complaint intelligence for streets, drains, waste, and public works.</p>
+        <div className="topbar-actions">
+          <a href="/authority" className="topbar-link">Authority dashboard</a>
+          <p>Complaint intelligence for streets, drains, waste, and public works.</p>
+        </div>
       </header>
       <main className="page">
         <section className="intro">

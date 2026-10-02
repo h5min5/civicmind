@@ -29,6 +29,14 @@ export type Features = {
   confidence: number;
 };
 
+export type SeverityFactors = {
+  impact: number;
+  safety_risk: number;
+  report_volume: number;
+  location: number;
+  duration: number;
+};
+
 export type SubmitResult = {
   accepted: boolean;
   validation: {
@@ -38,6 +46,12 @@ export type SubmitResult = {
     image_shows_civic_issue: boolean | null;
   };
   features: Features | null;
+  issue_type: string | null;
+  department: string | null;
+  routing_reason: string | null;
+  severity_score: number | null;
+  priority: string | null;
+  status: string | null;
   complaint_id: string | null;
   incident_id: string | null;
   matched_existing: boolean | null;
@@ -61,6 +75,12 @@ export type ComplaintRecord = {
   issue_type: string;
   issue_subtype: string;
   severity: string;
+  severity_score: number | null;
+  priority: string | null;
+  department: string | null;
+  routing_reason: string | null;
+  status: string;
+  matched_existing: boolean;
   description: string;
   visual_evidence: string;
   confidence: number;
@@ -174,4 +194,53 @@ export function fetchComplaints(filters: Filters, coords: { latitude: number; lo
 export function fetchIncidents(filters: Filters, coords: { latitude: number; longitude: number } | null) {
   const params = filterQuery(filters, coords);
   return request<{ incidents: IncidentRecord[] }>(`/api/incidents?${params.toString()}`);
+}
+
+export type AuthorityStats = {
+  total_complaints: number;
+  pending_complaints: number;
+  resolved_complaints: number;
+  high_priority_complaints: number;
+  critical_complaints: number;
+  duplicate_complaints: number;
+  complaints_by_department: { department: string; total: number }[];
+  complaints_by_priority: { priority: string; total: number }[];
+};
+
+export type AuthorityComplaint = {
+  id: string;
+  issue_type: string;
+  issue_category: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+  department: string | null;
+  severity_score: number | null;
+  priority: string | null;
+  status: string;
+  matched_existing: boolean;
+  original_text: string;
+};
+
+export function fetchAuthorityStats() {
+  return request<AuthorityStats>("/api/authority/stats");
+}
+
+export function fetchAuthorityComplaints(params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && String(value).length > 0) {
+      query.set(key, String(value));
+    }
+  }
+  return request<{ complaints: AuthorityComplaint[] }>(`/api/authority/complaints?${query.toString()}`);
+}
+
+export function updateComplaintStatus(complaintId: string, status: string) {
+  return request<{ complaint_id: string; status: string }>(`/api/authority/complaints/${complaintId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
 }

@@ -133,6 +133,8 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
               <header>
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
                 <span className={`badge ${item.severity}`}>{item.severity}</span>
+                {item.department && <span className="status-chip">{item.department}</span>}
+                {item.priority && <span className={`badge ${item.priority}`}>{item.priority}</span>}
               </header>
               <h3>{labelize(item.issue_type)}</h3>
               <p>{item.description}</p>
@@ -141,11 +143,13 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
                 <span>
                   {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
                 </span>
+                {item.severity_score != null && <span>Severity {item.severity_score.toFixed(1)}/10</span>}
                 {item.distance_m != null && <span>{formatDistance(item.distance_m)} away</span>}
                 <a href={mapLink(item.latitude, item.longitude)} target="_blank" rel="noreferrer">
                   Map
                 </a>
               </div>
+              {item.status && <p className="quiet">Status: {item.status}</p>}
               <p className="quiet">Incident {item.incident_id}</p>
               <details>
                 <summary>Citizen&apos;s words</summary>

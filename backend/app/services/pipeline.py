@@ -7,9 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.models import Complaint, Incident
+from app.services.dashboard import normalize_status
 from app.services.embeddings import get_embedding_client, to_pgvector
 from app.services.groq_vision import Analysis, semantic_text
 from app.services.matching import Candidate, Decision, Thresholds, evaluate_candidates
+from app.services.priority import classify_priority
+from app.services.routing import route_department
+from app.services.severity import calculate_severity
 
 logger = logging.getLogger("civicmind")
 
@@ -67,6 +71,16 @@ def submit_complaint(
         session.flush()
 
     complaint_id = uuid.uuid4()
+    severity_result = calculate_severity(
+        issue_type=features.issue_type,
+        issue_category=features.issue_category,
+        description=features.description,
+        location=f"lat={latitude},lng={longitude}",
+        report_volume=_report_volume(session, features.issue_type, features.issue_category),
+        duration_hours=_extract_duration_hours(original_text, features.description),
+        safety_context=f"{original_text} {features.visual_evidence}",
+    )
+    route = route_department(features.issue_type, features.issue_category)
     complaint = Complaint(
         id=complaint_id,
         original_text=original_text,
@@ -77,6 +91,12 @@ def submit_complaint(
         issue_type=features.issue_type,
         issue_subtype=features.issue_subtype,
         severity=features.severity,
+        severity_score=severity_result["severity_score"],
+        priority=severity_result["priority"],
+        department=route["department"],
+        routing_reason=route["reason"],
+        status=normalize_status("submitted"),
+        matched_existing=bool(decision.matched_existing),
         description=features.description,
         visual_evidence=features.visual_evidence,
         confidence=features.confidence,
@@ -105,6 +125,34 @@ def _thresholds(settings: Settings) -> Thresholds:
         geo_radius_meters=settings.geo_radius_meters,
         time_window_hours=settings.time_window_hours,
     )
+
+
+def _report_volume(session: Session, issue_type: str, category: str) -> int:
+    row = session.execute(
+        text(
+            """
+            SELECT COUNT(*) AS count
+            FROM complaints
+            WHERE issue_type = :issue_type
+              OR issue_category = :category
+            """
+        ),
+        {"issue_type": issue_type, "category": category},
+    ).scalar_one()
+    return max(0, int(row or 0))
+
+
+def _extract_duration_hours(original_text: str, description: str) -> float | None:
+    text = f"{original_text} {description}".lower()
+    for marker in ("days", "weeks", "months"):
+        if marker in text:
+            if "days" in text:
+                return 72.0
+            if "weeks" in text:
+                return 168.0
+            if "months" in text:
+                return 720.0
+    return 12.0
 
 
 def _load_candidates(

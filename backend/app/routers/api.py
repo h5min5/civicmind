@@ -3,17 +3,24 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy.orm import undefer
 
 from app.config import get_settings
 from app.database import SessionLocal, ping_database, safe_error
 from app.models import Complaint
+from app.services.dashboard import authority_stats, list_authority_complaints, normalize_status, update_complaint_status
 from app.services.embeddings import ProviderError, cached_dimension, get_embedding_client
 from app.services.groq_vision import analyze_complaint
 from app.services.pipeline import submit_complaint
 from app.services.queries import list_complaints, list_incidents
 
 router = APIRouter()
+
+
+class StatusUpdateRequest(BaseModel):
+    status: str
+
 
 MAX_IMAGE_BYTES = 3_500_000
 SEVERITIES = {"low", "medium", "high", "critical"}
@@ -90,6 +97,63 @@ def create_complaint(
         return payload
     except ProviderError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        session.close()
+
+
+@router.get("/authority/stats")
+def authority_summary():
+    database = ping_database()
+    if not database["ok"]:
+        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
+    session = SessionLocal()
+    try:
+        return authority_stats(session)
+    finally:
+        session.close()
+
+
+@router.get("/authority/complaints")
+def authority_complaints(
+    q: str | None = None,
+    department: str | None = None,
+    priority: str | None = None,
+    status: str | None = None,
+    issue_type: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    sort_by: str = Query(default="severity_score", pattern="(severity_score|date|priority)"),
+):
+    database = ping_database()
+    if not database["ok"]:
+        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
+    session = SessionLocal()
+    try:
+        return {"complaints": list_authority_complaints(
+            session,
+            q=_blank(q),
+            department=_blank(department),
+            priority=_blank(priority),
+            status=_blank(status),
+            issue_type=_blank(issue_type),
+            limit=limit,
+            sort_by=sort_by,
+        )}
+    finally:
+        session.close()
+
+
+@router.patch("/authority/complaints/{complaint_id}/status")
+def update_status(complaint_id: uuid.UUID, body: "StatusUpdateRequest"):
+    database = ping_database()
+    if not database["ok"]:
+        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
+    session = SessionLocal()
+    try:
+        with session.begin():
+            updated = update_complaint_status(session, str(complaint_id), body.status)
+        return {"complaint_id": str(complaint_id), "status": updated["status"]}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     finally:
         session.close()
 
@@ -202,6 +266,12 @@ def _accepted(analysis, complaint: Complaint, incident, decision, dimension: int
             "image_shows_civic_issue": assessment.image_shows_civic_issue,
         },
         "features": analysis.features.model_dump(),
+        "issue_type": complaint.issue_type,
+        "department": complaint.department,
+        "routing_reason": complaint.routing_reason,
+        "severity_score": float(complaint.severity_score) if complaint.severity_score is not None else None,
+        "priority": complaint.priority,
+        "status": complaint.status,
         "complaint_id": str(complaint.id),
         "incident_id": str(incident.id),
         "matched_existing": decision.matched_existing,

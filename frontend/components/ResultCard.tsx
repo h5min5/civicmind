@@ -64,7 +64,21 @@ export function ResultCard({ submitting, result, error }: Props) {
             <span>Confidence {Math.round(result.features.confidence * 100)}%</span>
             <span>{labelize(result.features.issue_subtype)}</span>
           </div>
+          {result.department && (
+            <div className="meta" style={{ marginTop: 10 }}>
+              <span className="status-chip">Department: {result.department}</span>
+            </div>
+          )}
+          {result.severity_score != null && result.priority && (
+            <div className="meta" style={{ marginTop: 10 }}>
+              <span className="badge">Severity {result.severity_score.toFixed(1)} / 10</span>
+              <span className={`badge ${result.priority}`}>{result.priority}</span>
+            </div>
+          )}
           <p className="quiet">{result.features.visual_evidence}</p>
+          {result.status && (
+            <p className="quiet">Status: {result.status}</p>
+          )}
           <div className="id-row">
             <span className={result.matched_existing ? "status-chip" : "status-chip new"}>
               {result.matched_existing ? "Existing incident" : "New incident"}
