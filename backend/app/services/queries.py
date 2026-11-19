@@ -4,17 +4,21 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.departments import department_name
+from app.services.priority import priority_for_incident
+
 IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPLAINT_COLUMNS = """
 id, original_text, image_path, issue_category, issue_type, issue_subtype,
 severity, description, visual_evidence, confidence, latitude, longitude, area,
-timestamp, incident_id, created_at
+timestamp, incident_id, created_at, tracking_code, language
 """
 
 INCIDENT_COLUMNS = """
 id, issue_category, issue_type, severity, latitude, longitude, area,
-first_reported_at, last_reported_at, report_count
+first_reported_at, last_reported_at, report_count, department, status,
+resolved_at, tracking_code, summary, routing_reason, resolution_note, reopen_count
 """
 
 
@@ -130,7 +134,7 @@ def list_incidents(
     LIMIT :limit
     """
     rows = session.execute(text(sql), params).mappings().all()
-    return [_record(row) for row in rows]
+    return [_with_priority(_record(row)) for row in rows]
 
 
 def _filters(
@@ -190,6 +194,24 @@ def list_areas(session: Session) -> list[str]:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _with_priority(item: dict) -> dict:
+    started = datetime.fromisoformat(item["first_reported_at"])
+    resolved = datetime.fromisoformat(item["resolved_at"]) if item.get("resolved_at") else None
+    item["priority"] = priority_for_incident(
+        category=item["issue_category"],
+        severity=item["severity"],
+        report_count=int(item["report_count"]),
+        latitude=float(item["latitude"]),
+        longitude=float(item["longitude"]),
+        area=item.get("area"),
+        started_at=started,
+        status=item.get("status") or "open",
+        resolved_at=resolved,
+    )
+    item["department_name"] = department_name(item.get("department"))
+    return item
 
 
 def _record(row) -> dict:

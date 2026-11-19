@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Fraunces, Outfit } from "next/font/google";
+import { Fraunces, IBM_Plex_Mono, Outfit } from "next/font/google";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SessionProvider } from "@/lib/session";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces" });
+const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "CivicMind",
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#445D48",
+  themeColor: "#07110c",
   width: "device-width",
   initialScale: 1,
 };
@@ -23,9 +25,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${outfit.variable} ${fraunces.variable}`}>
-        <SiteHeader />
-        {children}
+      <body className={`${outfit.variable} ${fraunces.variable} ${mono.variable}`}>
+        <SessionProvider>
+          <SiteHeader />
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

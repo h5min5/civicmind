@@ -1,17 +1,20 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import undefer
 
 from app.config import get_settings
 from app.database import SessionLocal, ping_database, safe_error
 from app.models import Complaint
+from app.services.auth import AuthError, resolve_user
+from app.services.departments import department_name
 from app.services.embeddings import ProviderError, cached_dimension, get_embedding_client
 from app.services.geocode import ensure_areas, lookup_area
 from app.services.groq_vision import analyze_complaint
 from app.services.pipeline import submit_complaint
+from app.services.priority import priority_for_incident
 from app.services.queries import list_areas, list_complaints, list_incidents
 
 router = APIRouter()
@@ -57,6 +60,8 @@ def create_complaint(
     latitude: float = Form(...),
     longitude: float = Form(...),
     image: UploadFile | None = File(None),
+    language: str | None = Form(None),
+    authorization: str | None = Header(None),
 ):
     complaint_text = _clean_text(text)
     _validate_coordinates(latitude, longitude)
@@ -77,6 +82,10 @@ def create_complaint(
     session = SessionLocal()
     try:
         with session.begin():
+            try:
+                user = resolve_user(session, authorization, required=False)
+            except AuthError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.message) from exc
             complaint, incident, decision, dimension = submit_complaint(
                 session,
                 complaint_text,
@@ -86,6 +95,8 @@ def create_complaint(
                 analysis,
                 image_bytes,
                 media_type,
+                citizen_id=user.id if user else None,
+                language=_language(language),
             )
             payload = _accepted(analysis, complaint, incident, decision, dimension)
         return payload
@@ -243,6 +254,24 @@ def _accepted(analysis, complaint: Complaint, incident, decision, dimension: int
         "embedding_dimensions": dimension,
         "timestamp": complaint.timestamp.isoformat(),
         "thresholds": _thresholds(),
+        "tracking_code": complaint.tracking_code,
+        "incident_tracking_code": incident.tracking_code,
+        "department": incident.department,
+        "department_name": department_name(incident.department),
+        "routing_reason": incident.routing_reason,
+        "area": complaint.area,
+        "summary": incident.summary,
+        "priority": priority_for_incident(
+            category=incident.issue_category,
+            severity=incident.severity,
+            report_count=incident.report_count,
+            latitude=incident.latitude,
+            longitude=incident.longitude,
+            area=incident.area,
+            started_at=incident.first_reported_at,
+            status=incident.status or "open",
+            resolved_at=incident.resolved_at,
+        ),
     }
 
 
@@ -269,6 +298,14 @@ def _rejected(assessment, timestamp: datetime) -> dict:
         "embedding_dimensions": None,
         "timestamp": timestamp.isoformat(),
         "thresholds": _thresholds(),
+        "tracking_code": None,
+        "incident_tracking_code": None,
+        "department": None,
+        "department_name": None,
+        "routing_reason": None,
+        "area": None,
+        "summary": None,
+        "priority": None,
     }
 
 
@@ -279,6 +316,15 @@ def _thresholds() -> dict:
         "geo_radius_meters": settings.geo_radius_meters,
         "time_window_hours": settings.time_window_hours,
     }
+
+
+def _language(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    key = value.strip().lower()
+    if key not in {"en", "hi", "mr"}:
+        raise HTTPException(status_code=400, detail="Language must be English, Hindi, or Marathi.")
+    return key
 
 
 def _clean_text(value: str) -> str:

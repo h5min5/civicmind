@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
 import { imageUrl } from "@/lib/api";
-import { CATEGORIES, SEVERITIES, categoryLabel, formatDistance, formatWhen, labelize, mapLink } from "@/lib/format";
+import { CATEGORIES, SEVERITIES, categoryLabel, departmentLabel, formatDistance, formatWhen, labelize, mapLink, statusLabel } from "@/lib/format";
 import type { Coords } from "@/lib/locate";
 
 const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod) => mod.ComplaintMap), {
@@ -200,6 +200,9 @@ export function Records({
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
                 <span className={`badge ${item.severity}`}>{item.severity}</span>
                 <span className="badge">{item.report_count} reports</span>
+                {item.priority && <span className="badge">priority {item.priority.score.toFixed(1)}</span>}
+                {item.status && <span className="badge">{statusLabel(item.status)}</span>}
+                {item.department && <span className="badge">{departmentLabel(item.department)}</span>}
               </header>
               <h3>{labelize(item.issue_type)}</h3>
               <div className="meta">

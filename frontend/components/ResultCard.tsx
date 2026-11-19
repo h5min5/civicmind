@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { SubmitResult } from "@/lib/api";
+import { PriorityMeter } from "@/components/PriorityMeter";
 import { categoryLabel, formatDistance, formatGap, formatWhen, labelize } from "@/lib/format";
 
 type Props = {
@@ -70,22 +71,14 @@ export function ResultCard({ submitting, result, error }: Props) {
             <span className={result.matched_existing ? "status-chip" : "status-chip new"}>
               {result.matched_existing ? "Existing incident" : "New incident"}
             </span>
-            {result.incident_id && (
-              <>
-                <code>{result.incident_id}</code>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    if (!result.incident_id) return;
-                    void navigator.clipboard.writeText(result.incident_id).catch(() => undefined);
-                  }}
-                >
-                  Copy
-                </button>
-              </>
+            {result.department_name && <span className="badge">{result.department_name}</span>}
+            {result.tracking_code && (
+              <Link href={`/track/${result.tracking_code}`}>{result.tracking_code}</Link>
             )}
+            {result.incident_tracking_code && <code>{result.incident_tracking_code}</code>}
           </div>
+          {result.routing_reason && <p className="explanation">{result.routing_reason}</p>}
+          {result.priority && <PriorityMeter priority={result.priority} />}
           <div className="metrics">
             <Metric
               label="Semantic similarity"

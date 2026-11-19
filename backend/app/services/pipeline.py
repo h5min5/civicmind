@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.models import Complaint, Incident
+from app.services.bootstrap import complaint_code, incident_code
+from app.services.departments import infer_department
 from app.services.embeddings import get_embedding_client, to_pgvector
 from app.services.geocode import lookup_area
 from app.services.groq_vision import Analysis, semantic_text
 from app.services.matching import Candidate, Decision, Thresholds, evaluate_candidates
+from app.services.workspace import finalize_submission
 
 logger = logging.getLogger("civicmind")
 
@@ -26,6 +29,8 @@ def submit_complaint(
     analysis: Analysis,
     image: bytes | None,
     media_type: str | None,
+    citizen_id: uuid.UUID | None = None,
+    language: str | None = None,
 ) -> tuple[Complaint, Incident, Decision, int]:
     if analysis.features is None:
         raise RuntimeError("Only accepted complaints can be stored.")
@@ -55,9 +60,20 @@ def submit_complaint(
             incident.severity = features.severity
         if area and not incident.area:
             incident.area = area
+        if not incident.department:
+            department, reason = infer_department(incident.issue_category, incident.issue_type, original_text)
+            incident.department = department
+            incident.routing_reason = reason
+        if not incident.tracking_code:
+            incident.tracking_code = incident_code(incident.id)
+        if not incident.status:
+            incident.status = "open"
+        created = False
     else:
+        department, reason = infer_department(features.issue_category, features.issue_type, original_text)
+        incident_id = uuid.uuid4()
         incident = Incident(
-            id=uuid.uuid4(),
+            id=incident_id,
             issue_category=features.issue_category,
             issue_type=features.issue_type,
             severity=features.severity,
@@ -67,9 +83,15 @@ def submit_complaint(
             first_reported_at=timestamp,
             last_reported_at=timestamp,
             report_count=1,
+            department=department,
+            status="open",
+            routing_reason=reason,
+            tracking_code=incident_code(incident_id),
+            reopen_count=0,
         )
         session.add(incident)
         session.flush()
+        created = True
 
     complaint_id = uuid.uuid4()
     complaint = Complaint(
@@ -92,9 +114,13 @@ def submit_complaint(
         embedding=embedding,
         incident_id=incident.id,
         created_at=timestamp,
+        citizen_id=citizen_id,
+        language=language,
+        tracking_code=complaint_code(complaint_id),
     )
     session.add(complaint)
     session.flush()
+    finalize_submission(session, incident, complaint, decision.explanation, created)
     logger.info(
         "Stored complaint %s on incident %s matched=%s dim=%s",
         complaint.id,

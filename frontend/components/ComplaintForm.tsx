@@ -1,27 +1,55 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { compressImage } from "@/lib/format";
 import { readBrowserLocation, type Coords } from "@/lib/locate";
+
+const LocationPicker = dynamic(() => import("@/components/LocationPicker").then((mod) => mod.LocationPicker), {
+  ssr: false,
+  loading: () => <div className="map-frame picker-map" role="status">Loading the map…</div>,
+});
+
+type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
+
+type SpeechEngine = {
+  lang: string;
+  interimResults: boolean;
+  onresult: ((event: SpeechResult) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
 
 type Props = {
   submitting: boolean;
   coords: Coords | null;
   onCoords: (coords: Coords) => void;
-  onSubmit: (payload: { text: string; image: File | null }) => Promise<void>;
+  onSubmit: (payload: { text: string; image: File | null; language: string }) => Promise<void>;
 };
+
+const LANGUAGES = [
+  { value: "en", label: "English", speech: "en-IN" },
+  { value: "hi", label: "Hindi", speech: "hi-IN" },
+  { value: "mr", label: "Marathi", speech: "mr-IN" },
+];
 
 export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props) {
   const [text, setText] = useState("");
+  const [language, setLanguage] = useState("en");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<string | null>(null);
+  const speechRef = useRef<SpeechEngine | null>(null);
 
   useEffect(() => {
     return () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+      speechRef.current?.stop();
     };
   }, []);
 
@@ -54,21 +82,67 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
     }
   }
 
+  function toggleVoice() {
+    setError(null);
+    if (listening) {
+      speechRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const browser = window as Window & { SpeechRecognition?: new () => SpeechEngine; webkitSpeechRecognition?: new () => SpeechEngine };
+    const Ctor = browser.SpeechRecognition || browser.webkitSpeechRecognition;
+    if (!Ctor) {
+      setError("This browser has no voice input. Type the complaint instead.");
+      return;
+    }
+    const engine = new Ctor();
+    engine.lang = LANGUAGES.find((item) => item.value === language)?.speech ?? "en-IN";
+    engine.interimResults = false;
+    engine.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+      if (transcript) setText((current) => (current ? `${current} ${transcript}` : transcript));
+    };
+    engine.onerror = (event) => {
+      setListening(false);
+      setError(event.error === "not-allowed" ? "Allow the microphone to dictate a complaint." : "Voice input stopped.");
+    };
+    engine.onend = () => setListening(false);
+    speechRef.current = engine;
+    engine.start();
+    setListening(true);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!coords) {
-      setError("Use your location before submitting. Coordinates come from the phone, not the AI.");
+      setError("Use GPS or drop a pin before submitting. Coordinates come from the map, not the model.");
       return;
     }
     setError(null);
-    await onSubmit({ text, image });
+    await onSubmit({ text, image, language });
   }
 
   return (
-    <form className="card form" onSubmit={submit}>
+    <form className="card form" id="report" onSubmit={submit}>
       <div>
         <p className="eyebrow">New report</p>
         <h2>File a civic complaint</h2>
+      </div>
+      <div className="language-row" role="radiogroup" aria-label="Complaint language">
+        {LANGUAGES.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className={language === item.value ? "chip on" : "chip"}
+            aria-pressed={language === item.value}
+            onClick={() => setLanguage(item.value)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
       <label className="field">
         What is happening?
@@ -81,6 +155,12 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
           minLength={8}
         />
       </label>
+      <div className="photo-actions">
+        <button className="button secondary" type="button" onClick={toggleVoice} disabled={submitting}>
+          {listening ? "Stop listening" : "Speak"}
+        </button>
+        <p className="hint">Voice uses this browser in English, Hindi, or Marathi. The written text is what gets checked.</p>
+      </div>
       <div className="field">
         <span>Photo, optional</span>
         <div className="photo-actions">
@@ -108,7 +188,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
             />
           </label>
         </div>
-        <p className="hint">A random photo is rejected even if the text describes a real problem.</p>
+        <p className="hint">A photo is checked against the text. A selfie, a meal, or an unrelated picture is rejected.</p>
         {preview && (
           <div className="preview">
             <img src={preview} alt="Selected complaint photo" />
@@ -140,7 +220,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
             {coords.accuracy != null && <span>Accuracy ±{Math.round(coords.accuracy)} m</span>}
           </p>
         )}
-        <p className="hint">The browser asks for permission. The model is never asked to invent GPS or the time.</p>
+        <LocationPicker coords={coords} onChange={onCoords} />
       </div>
       {error && <p className="form-error">{error}</p>}
       <button className="button wide" type="submit" disabled={submitting || text.trim().length < 8 || !coords}>

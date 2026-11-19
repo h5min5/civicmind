@@ -1,0 +1,62 @@
+import unittest
+from datetime import datetime, timedelta, timezone
+
+from app.services.departments import department_for_category
+from app.services.priority import combine, duration_score, location_score, priority_for_incident, volume_score
+
+
+class DepartmentRoutingTests(unittest.TestCase):
+    def test_known_categories_keep_their_desk(self):
+        self.assertEqual(department_for_category("road"), "roads_infra")
+        self.assertEqual(department_for_category("sewage"), "sanitation")
+        self.assertEqual(department_for_category("pollution"), "public_health")
+        self.assertEqual(department_for_category("traffic"), "traffic")
+
+    def test_other_is_not_forced_onto_a_desk(self):
+        self.assertIsNone(department_for_category("other"))
+        self.assertIsNone(department_for_category(None))
+
+
+class PriorityTests(unittest.TestCase):
+    def test_weights_sum_to_the_published_formula(self):
+        self.assertEqual(combine(7, 8, 1, 8, 2), 5.7)
+
+    def test_volume_rises_with_repeat_reports(self):
+        self.assertEqual(volume_score(1), 1)
+        self.assertEqual(volume_score(2), 3)
+        self.assertEqual(volume_score(12), 10)
+
+    def test_named_mumbai_location_scores_higher_than_a_bare_pin(self):
+        self.assertEqual(location_score(19.208, 72.835, "Mahavir Nagar"), 8)
+        self.assertEqual(location_score(19.208, 72.835, None), 5)
+        self.assertEqual(location_score(28.6, 77.2, "Delhi"), 3)
+
+    def test_open_issues_become_more_urgent_as_they_age(self):
+        start = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        self.assertEqual(duration_score(start, start + timedelta(hours=2)), 1)
+        self.assertEqual(duration_score(start, start + timedelta(days=10)), 8)
+
+    def test_a_fresh_pothole_stays_a_moderate_priority(self):
+        now = datetime(2026, 9, 29, 14, 0, tzinfo=timezone.utc)
+        result = priority_for_incident(
+            category="road",
+            severity="medium",
+            report_count=2,
+            latitude=19.20835,
+            longitude=72.83496,
+            area="Renuka Nagar, Mahavir Nagar",
+            started_at=now - timedelta(hours=2),
+            status="open",
+            resolved_at=None,
+            now=now,
+        )
+        self.assertEqual(result["impact"], 7)
+        self.assertEqual(result["risk"], 5)
+        self.assertEqual(result["volume"], 3)
+        self.assertEqual(result["location"], 8)
+        self.assertEqual(result["duration"], 1)
+        self.assertEqual(result["score"], combine(7, 5, 3, 8, 1))
+
+
+if __name__ == "__main__":
+    unittest.main()
