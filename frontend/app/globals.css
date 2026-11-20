@@ -382,6 +382,24 @@ textarea { min-height: 140px; resize: vertical; }
 .record header, .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .record h3 { font-size: 1.05rem; }
 .record p { margin: 0; line-height: 1.45; }
+.authority-updates { display: grid; gap: 8px; margin-top: 4px; }
+.authority-update {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 0 14px 14px 0;
+  border-left: 3px solid var(--sun);
+  background: rgba(255, 210, 74, 0.08);
+}
+.authority-update strong {
+  color: var(--sun);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.authority-update span { color: var(--muted); font-size: 0.78rem; }
+.authority-update.status { border-left-color: var(--rose); background: rgba(255, 110, 168, 0.08); }
+.authority-update.status strong { color: var(--rose); }
 .thumb { width: 100%; max-height: 160px; object-fit: cover; border-radius: 12px; }
 details summary { cursor: pointer; color: var(--forest); font-weight: 650; }
 .empty { margin: 0; color: var(--muted); }
@@ -393,6 +411,43 @@ details summary { cursor: pointer; color: var(--forest); font-weight: 650; }
   line-height: 1.5;
 }
 
+.notice-strip { margin-top: 28px; display: grid; gap: 14px; }
+.notice-strip-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.notice-strip-head h2 { margin: 0; font-family: var(--font-fraunces), Georgia, serif; font-weight: 560; letter-spacing: -0.03em; }
+.notice-grid { display: grid; gap: 12px; }
+.notice-sheet {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(12, 22, 16, 0.78);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--sun);
+  min-width: 0;
+}
+.notice-sheet header { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.notice-kind {
+  color: #1a1404;
+  background: var(--sun);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.notice-sheet.kind-closure { border-top-color: var(--rose); }
+.notice-sheet.kind-closure .notice-kind { background: var(--rose); color: #2a0614; }
+.notice-sheet.kind-advisory { border-top-color: var(--forest); }
+.notice-sheet.kind-advisory .notice-kind { background: var(--forest); color: #04140b; }
+.notice-sheet.kind-circular { border-top-color: #f4fff8; }
+.notice-sheet.kind-circular .notice-kind { background: #f4fff8; color: #102117; }
+.notice-ref { color: var(--muted); font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.78rem; }
+.notice-sheet h3 { margin: 0; font-family: var(--font-fraunces), Georgia, serif; font-weight: 560; }
+.notice-meta, .notice-dates { margin: 0; color: var(--muted); font-size: 0.82rem; }
+.notice-body { margin: 0; line-height: 1.5; white-space: pre-wrap; }
+.notice-file { width: 100%; max-height: 280px; object-fit: cover; border-radius: 12px; }
+.notice-download { font-weight: 650; }
 .features { margin-top: 36px; }
 .features h2 {
   margin: 0 0 14px;
@@ -463,6 +518,7 @@ details summary { cursor: pointer; color: var(--forest); font-weight: 650; }
 
 @media (min-width: 1100px) {
   .desk-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .notice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -484,6 +540,15 @@ details summary { cursor: pointer; color: var(--forest); font-weight: 650; }
 .chip.on { background: rgba(61, 220, 132, 0.16); color: #f4fff8; box-shadow: inset 0 0 0 1px rgba(61, 220, 132, 0.55); }
 .nav-user { margin: 0; color: var(--gold); font-size: 0.82rem; font-weight: 650; }
 .nav-user-bar { display: none; }
+.view-lang { display: inline-flex; align-items: center; flex: 0 0 auto; }
+.view-lang select {
+  width: auto;
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0 12px;
+}
+.command-root .view-lang { width: 100%; }
+.command-root .view-lang select { width: 100%; }
 .nav-user-menu { padding: 8px 12px; }
 .hero { display: grid; gap: 14px; max-width: 760px; margin: 0 auto 22px; }
 .hero h1 {
@@ -666,6 +731,8 @@ body:has(.command-root) { background: #060910; color: #e7f4ff; }
   text-shadow: 0 0 18px rgba(92, 225, 255, 0.28);
 }
 .workload, .alert-list, .mini-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.command-root .notice-list { grid-template-columns: 1fr; }
+.command-root .notice-list p { margin: 4px 0 0; white-space: pre-wrap; line-height: 1.45; }
 .workload li, .alert-list button, .incident-row, .similar {
   display: grid;
   gap: 2px;

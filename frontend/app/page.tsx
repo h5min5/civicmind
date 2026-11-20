@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ComplaintForm } from "@/components/ComplaintForm";
 import { Features } from "@/components/Features";
+import { NoticeStrip } from "@/components/NoticeBoard";
 import { ResultCard } from "@/components/ResultCard";
-import { API_URL, type Health, type PublicStats, type SubmitResult, fetchHealth, fetchPublicStats, submitComplaint } from "@/lib/api";
+import { API_URL, type CivicNotice, type Health, type PublicStats, type SubmitResult, fetchHealth, fetchNotices, fetchPublicStats, submitComplaint } from "@/lib/api";
 import { DEPARTMENTS, formatDistance, formatGap } from "@/lib/format";
+import { useLocale, useTranslations } from "@/lib/i18n";
 import { type Coords } from "@/lib/locate";
 
 export default function HomePage() {
@@ -17,6 +19,7 @@ export default function HomePage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [stats, setStats] = useState<PublicStats | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<CivicNotice[]>([]);
   const [misconfigured, setMisconfigured] = useState(false);
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export default function HomePage() {
         setHealthError(error instanceof Error ? error.message : "Could not reach CivicMind.");
       });
     void fetchPublicStats().then(setStats).catch(() => setStats(null));
+    void fetchNotices().then((body) => setNotices(body.notices)).catch(() => setNotices([]));
   }, []);
 
   async function onSubmit(payload: { text: string; image: File | null; language: string }) {
@@ -52,43 +56,42 @@ export default function HomePage() {
     }
   }
 
+  const { t } = useLocale();
+  const deskCopy = useTranslations(DEPARTMENTS.flatMap((item) => [item.label, item.brief]));
   const rule = health?.thresholds;
   const showResult = submitting || result != null || submitError != null;
 
   return (
     <main className="page">
       <section className="hero">
-        <p className="eyebrow">Mumbai civic intelligence</p>
-        <h1>The street, understood.</h1>
-        <p>
-          Describe a problem in English, Hindi, or Marathi, add a photo if you have one, and pin the place. CivicMind checks
-          that the report is real, groups it with the same incident nearby, and routes it to the right department.
-        </p>
+        <p className="eyebrow">{t("hero.eyebrow")}</p>
+        <h1>{t("hero.title")}</h1>
+        <p>{t("hero.body")}</p>
         <div className="hero-actions">
           <a className="button" href="#report">
-            File a complaint
+            {t("hero.file")}
           </a>
           <Link className="button secondary" href="/complaints">
-            Explore the map
+            {t("hero.map")}
           </Link>
         </div>
         {stats && (
           <dl className="hero-stats">
             <div>
-              <dt>Live complaints</dt>
+              <dt>{t("stat.complaints")}</dt>
               <dd><StatValue value={stats.live_complaints} /></dd>
             </div>
             <div>
-              <dt>Live incidents</dt>
+              <dt>{t("stat.incidents")}</dt>
               <dd><StatValue value={stats.live_incidents} /></dd>
             </div>
             <div>
-              <dt>Resolved</dt>
+              <dt>{t("stat.resolved")}</dt>
               <dd><StatValue value={stats.live_resolved} /></dd>
             </div>
             {stats.archive_complaints != null && (
               <div>
-                <dt>Archive</dt>
+                <dt>{t("stat.archive")}</dt>
                 <dd><StatValue value={stats.archive_complaints} /></dd>
               </div>
             )}
@@ -110,14 +113,15 @@ export default function HomePage() {
         <ComplaintForm submitting={submitting} coords={coords} onCoords={setCoords} onSubmit={onSubmit} />
         <ResultCard submitting={submitting} result={result} error={submitError} />
       </div>
+      <NoticeStrip notices={notices} />
       <section className="desk-strip">
-        <p className="eyebrow">Ten departments</p>
-        <h2>Routed to the desk that owns the problem</h2>
+        <p className="eyebrow">{t("desk.eyebrow")}</p>
+        <h2>{t("desk.title")}</h2>
         <div className="desk-grid">
-          {DEPARTMENTS.map((item) => (
+          {DEPARTMENTS.map((item, index) => (
             <article key={item.value} className="desk" style={{ borderTopColor: item.accent }}>
-              <h3>{item.label}</h3>
-              <p>{item.brief}</p>
+              <h3>{deskCopy[index * 2] || item.label}</h3>
+              <p>{deskCopy[index * 2 + 1] || item.brief}</p>
             </article>
           ))}
         </div>

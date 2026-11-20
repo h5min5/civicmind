@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Fraunces, IBM_Plex_Mono, Outfit } from "next/font/google";
 import { SiteHeader } from "@/components/SiteHeader";
+import { LocaleProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
@@ -26,10 +27,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className={`${outfit.variable} ${fraunces.variable} ${mono.variable}`}>
-        <SessionProvider>
-          <SiteHeader />
-          {children}
-        </SessionProvider>
+        <LocaleProvider>
+          <SessionProvider>
+            <SiteHeader />
+            {children}
+          </SessionProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

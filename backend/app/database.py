@@ -160,6 +160,9 @@ _MIGRATIONS = (
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$
     """,
+    "ALTER TABLE notices ADD COLUMN IF NOT EXISTS file_name VARCHAR(160)",
+    "ALTER TABLE notices ADD COLUMN IF NOT EXISTS file_media_type VARCHAR(64)",
+    "ALTER TABLE notices ADD COLUMN IF NOT EXISTS file_bytes BYTEA",
 )
 
 

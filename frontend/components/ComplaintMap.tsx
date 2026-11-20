@@ -6,6 +6,7 @@ import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { ComplaintRecord } from "@/lib/api";
 import { categoryLabel, formatWhen, labelize } from "@/lib/format";
+import { useLocale } from "@/lib/i18n";
 
 const MUMBAI: L.LatLngExpression = [19.076, 72.8777];
 const MUMBAI_BOUNDS = L.latLngBounds([
@@ -110,6 +111,7 @@ function draw(map: LeafletMap, layer: LayerGroup, complaints: ComplaintRecord[],
 }
 
 export function ComplaintMap({ complaints }: { complaints: ComplaintRecord[] }) {
+  const { t } = useLocale();
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
@@ -154,16 +156,16 @@ export function ComplaintMap({ complaints }: { complaints: ComplaintRecord[] }) 
 
   return (
     <div className="map-block">
-      <div ref={host} className="map-frame" role="region" aria-label="Complaints in Mumbai" />
+      <div ref={host} className="map-frame" role="region" aria-label={t("map.label")} />
       <div className="map-legend" aria-hidden="true">
         {Object.entries(SEVERITY_COLOR).map(([severity, color]) => (
           <span key={severity}>
             <i style={{ background: color }} />
-            {severity}
+            {t(`sev.${severity}`)}
           </span>
         ))}
       </div>
-      <p className="hint">Pan and zoom across Mumbai. Hover or tap a point to read the issue.</p>
+      <p className="hint">{t("map.hint")}</p>
     </div>
   );
 }

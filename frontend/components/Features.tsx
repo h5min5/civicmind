@@ -1,3 +1,7 @@
+"use client";
+
+import { useLocale, useTranslations } from "@/lib/i18n";
+
 const FEATURES = [
   {
     title: "Complaint Classification & Routing",
@@ -34,16 +38,18 @@ const FEATURES = [
 ];
 
 export function Features() {
+  const { t } = useLocale();
+  const lines = useTranslations(FEATURES.flatMap((feature) => [feature.title, feature.text]));
   return (
     <section className="features" aria-labelledby="features-title">
-      <p className="eyebrow">The platform</p>
-      <h2 id="features-title">What CivicMind does</h2>
+      <p className="eyebrow">{t("features.eyebrow")}</p>
+      <h2 id="features-title">{t("features.title")}</h2>
       <div className="feature-grid">
         {FEATURES.map((feature, index) => (
           <article className="feature" key={feature.title}>
             <p className="feature-index">{String(index + 1).padStart(2, "0")}</p>
-            <h3>{feature.title}</h3>
-            <p>{feature.text}</p>
+            <h3>{lines[index * 2] || feature.title}</h3>
+            <p>{lines[index * 2 + 1] || feature.text}</p>
           </article>
         ))}
       </div>

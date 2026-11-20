@@ -2,6 +2,8 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
+from pydantic import BaseModel, Field
+from typing import Literal
 from fastapi.responses import Response
 from sqlalchemy.orm import undefer
 
@@ -16,8 +18,15 @@ from app.services.groq_vision import analyze_complaint
 from app.services.pipeline import submit_complaint
 from app.services.priority import priority_for_incident
 from app.services.queries import list_areas, list_complaints, list_incidents
+from app.services.speech import transcribe
+from app.services.translate import translate_view
 
 router = APIRouter()
+
+
+class TranslateBody(BaseModel):
+    texts: list[str] = Field(min_length=1, max_length=40)
+    target: Literal["en", "hi", "mr"]
 
 MAX_IMAGE_BYTES = 3_500_000
 SEVERITIES = {"low", "medium", "high", "critical"}
@@ -52,6 +61,37 @@ def health():
         "embedding_error": embedding_error,
         "thresholds": _thresholds(),
     }
+
+
+@router.post("/translate")
+def translate(body: TranslateBody):
+    database = ping_database()
+    if not database["ok"]:
+        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
+    try:
+        translated = translate_view(body.texts, body.target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return {"translations": translated}
+
+
+@router.post("/speech")
+def speech(
+    audio: UploadFile = File(...),
+    hint: str | None = Form(None),
+):
+    data = audio.file.read()
+    media = audio.content_type or "audio/webm"
+    if media.startswith("video/"):
+        media = "audio/webm"
+    try:
+        return transcribe(data, audio.filename or "speech.webm", media.split(";")[0], hint)
+    except ProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/complaints")

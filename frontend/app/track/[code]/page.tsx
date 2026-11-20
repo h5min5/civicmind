@@ -5,8 +5,10 @@ import { useParams } from "next/navigation";
 import { imageUrl, sendFeedback, fetchTracking, type IncidentDetail } from "@/lib/api";
 import { PriorityMeter } from "@/components/PriorityMeter";
 import { departmentLabel, formatWhen, labelize, statusLabel } from "@/lib/format";
+import { useLocale, ViewText } from "@/lib/i18n";
 
 export default function TrackPage() {
+  const { t, locale } = useLocale();
   const params = useParams<{ code: string }>();
   const initial = decodeURIComponent(params.code || "");
   const [code, setCode] = useState(initial);
@@ -53,8 +55,8 @@ export default function TrackPage() {
   return (
     <main className="page">
       <section className="intro">
-        <h1>Track a complaint</h1>
-        <p>Use the CM- code from your report or the INC- code of the incident. The timeline is the audit of what actually happened.</p>
+        <h1>{t("track.title")}</h1>
+        <p>{t("track.body")}</p>
       </section>
       <form
         className="card filters"
@@ -64,11 +66,11 @@ export default function TrackPage() {
         }}
       >
         <label className="field">
-          Tracking code
+          {t("track.code")}
           <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="CM- or INC-" />
         </label>
         <button className="button" type="submit" disabled={loading || code.trim().length < 4}>
-          {loading ? "Looking up…" : "Look up"}
+          {loading ? t("track.looking") : t("track.lookup")}
         </button>
       </form>
       {error && <p className="form-error">{error}</p>}
@@ -82,10 +84,10 @@ export default function TrackPage() {
             <span className={`badge ${detail.severity}`}>{detail.severity}</span>
             <span>{detail.area || "Area unknown"}</span>
           </div>
-          <p>{detail.summary}</p>
+          <p><ViewText text={detail.summary} /></p>
           {detail.routing_reason && <p className="explanation">{detail.routing_reason}</p>}
           <PriorityMeter priority={detail.priority} />
-          <h3>Timeline</h3>
+          <h3>{t("track.timeline")}</h3>
           <ol className="timeline">
             {detail.events.map((event) => (
               <li key={event.id}>
@@ -96,13 +98,14 @@ export default function TrackPage() {
             ))}
             {detail.events.length === 0 && <li>No audit events have been stored for this incident yet.</li>}
           </ol>
-          <h3>Reports</h3>
+          <h3>{t("track.reports")}</h3>
           <div className="records">
             {detail.reports.map((report) => (
               <article className="record" key={report.id}>
                 {report.image_path && <img className="thumb" src={imageUrl(report.image_path) || ""} alt="Citizen evidence" />}
                 <h3>{report.tracking_code}</h3>
-                <p>{report.original_text}</p>
+                {locale !== "en" && <p className="quiet">{t("report.english")}</p>}
+                <p><ViewText text={report.description || report.original_text} /></p>
                 <p className="quiet">{formatWhen(report.timestamp)}</p>
               </article>
             ))}

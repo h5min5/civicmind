@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.services.departments import department_name
@@ -76,7 +76,7 @@ def list_complaints(
     LIMIT :limit
     """
     rows = session.execute(text(sql), params).mappings().all()
-    return [_record(row) for row in rows]
+    return _attach_updates(session, [_record(row) for row in rows], "incident_id")
 
 
 def list_incidents(
@@ -134,7 +134,7 @@ def list_incidents(
     LIMIT :limit
     """
     rows = session.execute(text(sql), params).mappings().all()
-    return [_with_priority(_record(row)) for row in rows]
+    return _attach_updates(session, [_with_priority(_record(row)) for row in rows], "id")
 
 
 def _filters(
@@ -212,6 +212,56 @@ def _with_priority(item: dict) -> dict:
     )
     item["department_name"] = department_name(item.get("department"))
     return item
+
+
+def _attach_updates(session: Session, records: list[dict], incident_key: str) -> list[dict]:
+    """Authority notes and status changes belong on the public complaint cards."""
+    ids: list[uuid.UUID] = []
+    seen: set[str] = set()
+    for record in records:
+        record["updates"] = []
+        raw = record.get(incident_key)
+        if raw is None:
+            continue
+        key = str(raw)
+        if key in seen:
+            continue
+        seen.add(key)
+        ids.append(uuid.UUID(key))
+    if not ids:
+        return records
+    rows = session.execute(
+        text(
+            """
+            SELECT id, incident_id, kind, message, created_at
+            FROM incident_events
+            WHERE incident_id IN :ids
+              AND kind IN ('note', 'status')
+            ORDER BY created_at
+            """
+        ).bindparams(bindparam("ids", expanding=True)),
+        {"ids": ids},
+    ).mappings().all()
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        item = _record(row)
+        message = (item.get("message") or "").strip()
+        if not message:
+            continue
+        grouped.setdefault(str(item["incident_id"]), []).append(
+            {
+                "id": item["id"],
+                "kind": item["kind"],
+                "message": message,
+                "created_at": item["created_at"],
+            }
+        )
+    for record in records:
+        raw = record.get(incident_key)
+        if raw is None:
+            continue
+        record["updates"] = grouped.get(str(raw), [])
+    return records
 
 
 def _record(row) -> dict:

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Area,
   AreaChart,
@@ -25,7 +25,10 @@ import {
   fetchAuthorityIncident,
   fetchAuthorityIncidents,
   fetchEvaluation,
+  fetchAuthorityNotices,
   fetchHotspots,
+  issueNotice,
+  withdrawNotice,
   fetchOverview,
   imageUrl,
   patchIncident,
@@ -37,20 +40,23 @@ import {
   type Hotspot,
   type IncidentDetail,
   type Overview,
+  type CivicNotice,
   type SessionUser,
 } from "@/lib/api";
 import { PriorityMeter } from "@/components/PriorityMeter";
 import { DEPARTMENTS, departmentAccent, departmentLabel, directionsLink, formatWhen, labelize, statusLabel } from "@/lib/format";
+import { useLocale, ViewLanguageSelect, ViewText } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 const AuthorityMap = dynamic(() => import("@/components/AuthorityMap").then((mod) => mod.AuthorityMap), { ssr: false });
 
-type View = "overview" | "incidents" | "map" | "analytics" | "hotspots" | "copilot" | "evaluation" | "activity" | "reports" | "accounts";
+type View = "overview" | "incidents" | "map" | "notices" | "analytics" | "hotspots" | "copilot" | "evaluation" | "activity" | "reports" | "accounts";
 
 const NAV: { id: View; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "incidents", label: "Incidents" },
   { id: "map", label: "Map" },
+  { id: "notices", label: "Notices" },
   { id: "analytics", label: "Analytics" },
   { id: "hotspots", label: "Hotspots" },
   { id: "copilot", label: "Copilot" },
@@ -72,6 +78,7 @@ function queryForApi(value: string) {
 
 export function CommandCenter() {
   const { user, ready, signIn } = useSession();
+  const { t } = useLocale();
   const allowed = user?.role === "admin" || user?.role === "authority";
   const [department, setDepartment] = useState("");
   const [view, setView] = useState<View>("overview");
@@ -92,6 +99,7 @@ export function CommandCenter() {
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[] | null>(null);
   const [evaluation, setEvaluation] = useState<EvaluationPayload | null>(null);
+  const [notices, setNotices] = useState<CivicNotice[]>([]);
   const [users, setUsers] = useState<SessionUser[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -169,6 +177,9 @@ export function CommandCenter() {
     if (view === "evaluation") {
       void fetchEvaluation(scope).then(setEvaluation).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Evaluation failed."));
     }
+    if (view === "notices") {
+      void fetchAuthorityNotices(scope).then((body) => setNotices(body.notices)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Notices failed."));
+    }
     if (view === "accounts" && user?.role === "admin") {
       void fetchAdminUsers().then((body) => setUsers(body.users)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Accounts failed."));
     }
@@ -196,11 +207,12 @@ export function CommandCenter() {
           <span className="live-dot" aria-hidden="true" />
           <p className="command-kicker">CivicMind</p>
           <strong>Command</strong>
+          <ViewLanguageSelect />
         </div>
         <nav>
           {nav.map((item) => (
             <button key={item.id} type="button" aria-current={view === item.id ? "page" : undefined} onClick={() => setView(item.id)}>
-              {item.label}
+              {t(item.id === "activity" ? "nav.audit" : `nav.${item.id}`)}
             </button>
           ))}
         </nav>
@@ -330,6 +342,14 @@ export function CommandCenter() {
               {selected.length > 0 && <BulkBar ids={selected} onDone={() => { setSelected([]); setReloadKey((value) => value + 1); }} />}
             </div>
           </section>
+        )}
+        {view === "notices" && (
+          <NoticesDesk
+            notices={notices}
+            scope={scope}
+            admin={user?.role === "admin"}
+            onChange={(next) => setNotices(next)}
+          />
         )}
         {view === "analytics" && <AnalyticsBoard data={analytics} />}
         {view === "hotspots" && <HotspotBoard live={hotspots} archive={analytics?.archive ?? null} health={analytics?.area_health ?? null} />}
@@ -500,7 +520,7 @@ function IncidentDrawer({
         </div>
         <button type="button" className="ghost" onClick={onClose}>Close</button>
       </header>
-      <p>{detail.summary}</p>
+      <p><ViewText text={detail.summary} /></p>
       {detail.ai_summary && <p className="explanation">{detail.ai_summary}</p>}
       <PriorityMeter priority={detail.priority} />
       <p className="hint">{detail.routing_reason}</p>
@@ -519,7 +539,7 @@ function IncidentDrawer({
             {report.image_path && <img src={imageUrl(report.image_path) || ""} alt="Citizen evidence" />}
             <figcaption>
               <strong>{report.tracking_code}</strong>
-              <span>{report.original_text}</span>
+              <span><ViewText text={report.description || report.original_text} /></span>
             </figcaption>
           </figure>
         ))}
@@ -898,7 +918,166 @@ function Accounts({ users, onCreated }: { users: SessionUser[]; onCreated: (user
   );
 }
 
+function NoticesDesk({
+  notices,
+  scope,
+  admin,
+  onChange,
+}: {
+  notices: CivicNotice[];
+  scope: string;
+  admin: boolean;
+  onChange: (notices: CivicNotice[]) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [kind, setKind] = useState("warning");
+  const [area, setArea] = useState("");
+  const [until, setUntil] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [department, setDepartment] = useState(scope && scope !== "unassigned" ? scope : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const locked = scope === "unassigned";
+
+  useEffect(() => {
+    setDepartment(scope && scope !== "unassigned" ? scope : "");
+  }, [scope]);
+
+  async function refresh() {
+    const next = await fetchAuthorityNotices(scope);
+    onChange(next.notices);
+  }
+
+  return (
+    <section className="command-split">
+      <form
+        className="panel stack"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError(null);
+          const desk = admin ? department || null : scope || null;
+          void issueNotice(
+            {
+              title: title.trim(),
+              body: body.trim(),
+              kind,
+              department: desk,
+              area: area.trim() || null,
+              effective_until: until || null,
+            },
+            file,
+          )
+            .then(() => refresh())
+            .then(() => {
+              setTitle("");
+              setBody("");
+              setArea("");
+              setUntil("");
+              setFile(null);
+              if (fileRef.current) fileRef.current.value = "";
+            })
+            .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "The notice was not issued."))
+            .finally(() => setBusy(false));
+        }}
+      >
+        <h2>Issue a notice</h2>
+        <p className="hint">
+          {locked
+            ? "Switch to All departments or a desk before issuing a notice."
+            : admin
+              ? "A citywide notice is read by every citizen. A department notice is issued in that desk’s name."
+              : `This notice is issued by ${departmentLabel(scope)}.`}
+        </p>
+        <label className="field">Kind
+          <select value={kind} onChange={(event) => setKind(event.target.value)} disabled={locked}>
+            <option value="warning">Warning</option>
+            <option value="closure">Closure</option>
+            <option value="advisory">Advisory</option>
+            <option value="circular">Circular</option>
+          </select>
+        </label>
+        {admin && !scope && (
+          <label className="field">Department
+            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+              <option value="">Citywide</option>
+              {DEPARTMENTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </label>
+        )}
+        <label className="field">Title
+          <input value={title} onChange={(event) => setTitle(event.target.value)} required minLength={8} disabled={locked} />
+        </label>
+        <label className="field">Area, if it is local
+          <input value={area} onChange={(event) => setArea(event.target.value)} placeholder="Bandra West" disabled={locked} />
+        </label>
+        <label className="field">In force until
+          <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} disabled={locked} />
+        </label>
+        <label className="field">Text of the notice
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} disabled={locked} placeholder="State what is closed or warned, where, and until when. Optional when a file is attached." />
+        </label>
+        <label className="field">Official document
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp,.pdf"
+            disabled={locked}
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <p className="hint">{file ? file.name : "PDF, JPG, PNG, or WebP, up to 8 MB. A typed notice still works without a file."}</p>
+        {error && <p className="command-error">{error}</p>}
+        <button className="button" type="submit" disabled={busy || locked || title.trim().length < 8 || (body.trim().length < 20 && !file)}>
+          {busy ? "Issuing…" : "Issue notice"}
+        </button>
+      </form>
+      <article className="panel">
+        <h2>Issued notices</h2>
+        {notices.length === 0 && <p className="empty">No notice has been issued in this workspace.</p>}
+        <ul className="workload notice-list">
+          {notices.map((notice) => (
+            <li key={notice.id}>
+              <span>{notice.reference_code} · {notice.kind} · {notice.department_name}</span>
+              <strong>{notice.title}</strong>
+              <small>
+                {notice.status === "active" ? "Active" : "Withdrawn"}
+                {notice.area ? ` · ${notice.area}` : ""}
+                {" · "}
+                {formatWhen(notice.created_at)}
+              </small>
+              <p>{notice.body}</p>
+              {notice.file_path && (
+                <a href={imageUrl(notice.file_path) || "#"} target="_blank" rel="noreferrer">
+                  Open {notice.file_name || "document"}
+                </a>
+              )}
+              {notice.status === "active" && (admin || notice.department === scope) && (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    if (!window.confirm(`Withdraw ${notice.reference_code}? It will leave the citizen notice board.`)) return;
+                    void withdrawNotice(notice.id)
+                      .then(() => refresh())
+                      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : "Could not withdraw that notice."));
+                  }}
+                >
+                  Withdraw
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </article>
+    </section>
+  );
+}
+
 function CommandLogin({ onSubmit }: { onSubmit: (email: string, password: string) => Promise<SessionUser> }) {
+  const { t } = useLocale();
   const [email, setEmail] = useState("admin@civicmind.in");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -915,13 +1094,14 @@ function CommandLogin({ onSubmit }: { onSubmit: (email: string, password: string
           .finally(() => setBusy(false));
       }}
     >
+      <ViewLanguageSelect />
       <p className="command-kicker">CivicMind</p>
-      <h1>Command center</h1>
-      <p>Department desks and the administrator sign in here. Citizens use the public site.</p>
-      <label className="field">Email<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required /></label>
-      <label className="field">Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required /></label>
+      <h1>{t("command.title")}</h1>
+      <p>{t("command.intro")}</p>
+      <label className="field">{t("command.email")}<input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required /></label>
+      <label className="field">{t("command.password")}<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required /></label>
       {error && <p className="command-error">{error}</p>}
-      <button className="button" type="submit" disabled={busy}>{busy ? "Checking…" : "Enter"}</button>
+      <button className="button" type="submit" disabled={busy}>{busy ? t("command.checking") : t("command.enter")}</button>
       <p className="hint">Demo administrator: admin@civicmind.in / Admin@12345. Each desk uses its id at civicmind.in, for example roads_infra@civicmind.in / Authority@12345.</p>
     </form>
   );

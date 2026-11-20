@@ -2,15 +2,32 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import type { ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
+import type { AuthorityUpdate, ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
 import { imageUrl } from "@/lib/api";
 import { CATEGORIES, SEVERITIES, categoryLabel, departmentLabel, formatDistance, formatWhen, labelize, mapLink, statusLabel } from "@/lib/format";
+import { useLocale, useTranslations, ViewText } from "@/lib/i18n";
 import type { Coords } from "@/lib/locate";
 
 const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod) => mod.ComplaintMap), {
   ssr: false,
   loading: () => <div className="map-frame" role="status">Loading the Mumbai map…</div>,
 });
+
+function AuthorityUpdates({ updates }: { updates?: AuthorityUpdate[] }) {
+  const { t } = useLocale();
+  if (!updates || updates.length === 0) return null;
+  return (
+    <div className="authority-updates">
+      {updates.map((update) => (
+        <article key={update.id} className={update.kind === "status" ? "authority-update status" : "authority-update"}>
+          <strong>{update.kind === "status" ? t("records.status") : t("records.note")}</strong>
+          <p><ViewText text={update.message} /></p>
+          <span>{formatWhen(update.created_at)}</span>
+        </article>
+      ))}
+    </div>
+  );
+}
 
 type Props = {
   filters: Filters;
@@ -39,6 +56,10 @@ export function Records({
   locating,
   onLocate,
 }: Props) {
+  const { t, locale } = useLocale();
+  const categoryNames = useTranslations(CATEGORIES.map((item) => item.label));
+  const descriptions = useTranslations(complaints.map((item) => item.description));
+  const localized = complaints.map((item, index) => ({ ...item, description: descriptions[index] || item.description }));
   const [tab, setTab] = useState<"complaints" | "incidents">("complaints");
 
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -47,15 +68,15 @@ export function Records({
 
   return (
     <section className="card">
-      <p className="eyebrow">Already reported</p>
-      <h1>Recent complaints and incidents</h1>
-      <ComplaintMap complaints={complaints} />
+      <p className="eyebrow">{t("records.eyebrow")}</p>
+      <h1>{t("records.title")}</h1>
+      <ComplaintMap complaints={localized} />
       <div className="tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "complaints"} onClick={() => setTab("complaints")}>
-          Complaints
+          {t("records.complaints")}
         </button>
         <button type="button" role="tab" aria-selected={tab === "incidents"} onClick={() => setTab("incidents")}>
-          Incidents
+          {t("records.incidents")}
         </button>
       </div>
       <form
@@ -66,7 +87,7 @@ export function Records({
         }}
       >
         <label className="field">
-          Search
+          {t("records.search")}
           <input
             type="search"
             value={filters.q}
@@ -76,9 +97,9 @@ export function Records({
         </label>
         <div className="filter-grid">
           <label className="field">
-            Area
+            {t("records.area")}
             <select value={filters.area} onChange={(event) => update("area", event.target.value)}>
-              <option value="">Any area</option>
+              <option value="">{t("records.anyArea")}</option>
               {areas.map((area) => (
                 <option key={area} value={area}>
                   {area}
@@ -88,29 +109,29 @@ export function Records({
             </select>
           </label>
           <label className="field">
-            Category
+            {t("records.category")}
             <select value={filters.category} onChange={(event) => update("category", event.target.value)}>
-              <option value="">Any</option>
-              {CATEGORIES.map((item) => (
+              <option value="">{t("records.any")}</option>
+              {CATEGORIES.map((item, index) => (
                 <option key={item.value} value={item.value}>
-                  {item.label}
+                  {categoryNames[index] || item.label}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Severity
+            {t("records.severity")}
             <select value={filters.severity} onChange={(event) => update("severity", event.target.value)}>
-              <option value="">Any</option>
+              <option value="">{t("records.any")}</option>
               {SEVERITIES.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {t(`sev.${item}`)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Issue type
+            {t("records.issueType")}
             <input
               type="text"
               value={filters.issueType}
@@ -119,17 +140,17 @@ export function Records({
             />
           </label>
           <label className="field">
-            From
+            {t("records.from")}
             <input type="date" value={filters.dateFrom} onChange={(event) => update("dateFrom", event.target.value)} />
           </label>
           <label className="field">
-            To
+            {t("records.to")}
             <input type="date" value={filters.dateTo} onChange={(event) => update("dateTo", event.target.value)} />
           </label>
         </div>
         <div className="near-row">
           <button className="button secondary" type="button" onClick={onLocate} disabled={locating || loading}>
-            {locating ? "Finding you…" : "Use my location"}
+            {locating ? t("form.finding") : t("form.myLocation")}
           </button>
           <label>
             <input
@@ -137,10 +158,10 @@ export function Records({
               checked={filters.near}
               onChange={(event) => update("near", event.target.checked)}
             />
-            Near my location
+            {t("records.near")}
           </label>
           <label className="field" style={{ minWidth: 140 }}>
-            Radius
+            {t("records.radius")}
             <select value={filters.radius} onChange={(event) => update("radius", Number(event.target.value))}>
               {[250, 500, 1000, 2000, 5000].map((radius) => (
                 <option key={radius} value={radius}>
@@ -151,26 +172,29 @@ export function Records({
           </label>
         </div>
         <p className="hint">
-          {coords
-            ? "Location search uses PostGIS around the coordinates from this phone. It is separate from the incident-matching radius."
-            : "Tap Use my location before searching nearby."}
+          {coords ? (
+            <ViewText text="Location search uses the coordinates from this phone. It is separate from the incident-matching radius." />
+          ) : (
+            t("records.locateHint")
+          )}
         </p>
         <button className="button" type="submit" disabled={loading || (filters.near && !coords)}>
-          {loading ? "Searching…" : "Apply filters"}
+          {loading ? t("records.searching") : t("records.apply")}
         </button>
       </form>
       {error && <p className="form-error">{error}</p>}
       {tab === "complaints" ? (
         <div className="records">
-          {complaints.length === 0 && !loading && !error && <p className="empty">No complaints match these filters yet.</p>}
-          {complaints.map((item) => (
+          {localized.length === 0 && !loading && !error && <p className="empty">{t("records.emptyComplaints")}</p>}
+          {localized.map((item) => (
             <article className="record" key={item.id}>
               {item.image_path && <img className="thumb" src={imageUrl(item.image_path) || ""} alt="" loading="lazy" />}
               <header>
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
-                <span className={`badge ${item.severity}`}>{item.severity}</span>
+                <span className={`badge ${item.severity}`}>{t(`sev.${item.severity}`)}</span>
               </header>
               <h3>{labelize(item.issue_type)}</h3>
+              {locale !== "en" && <p className="quiet">{t("report.english")}</p>}
               <p>{item.description}</p>
               <div className="meta">
                 <span>{formatWhen(item.timestamp)}</span>
@@ -185,20 +209,21 @@ export function Records({
               </div>
               <p className="quiet">Incident {item.incident_id}</p>
               <details>
-                <summary>Citizen&apos;s words</summary>
+                <summary>{t("records.words")}</summary>
                 <p>{item.original_text}</p>
               </details>
+              <AuthorityUpdates updates={item.updates} />
             </article>
           ))}
         </div>
       ) : (
         <div className="records">
-          {incidents.length === 0 && !loading && !error && <p className="empty">No incidents match these filters yet.</p>}
+          {incidents.length === 0 && !loading && !error && <p className="empty">{t("records.emptyIncidents")}</p>}
           {incidents.map((item) => (
             <article className="record" key={item.id}>
               <header>
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
-                <span className={`badge ${item.severity}`}>{item.severity}</span>
+                <span className={`badge ${item.severity}`}>{t(`sev.${item.severity}`)}</span>
                 <span className="badge">{item.report_count} reports</span>
                 {item.priority && <span className="badge">priority {item.priority.score.toFixed(1)}</span>}
                 {item.status && <span className="badge">{statusLabel(item.status)}</span>}
@@ -218,6 +243,7 @@ export function Records({
                 </a>
               </div>
               <p className="quiet">{item.id}</p>
+              <AuthorityUpdates updates={item.updates} />
             </article>
           ))}
         </div>

@@ -15,6 +15,7 @@ from app.services.departments import DEPARTMENT_IDS, catalog, department_name
 from app.services.embeddings import ProviderError
 from app.services.forecast import archive_path, archive_snapshot, load_archive, routing_agreement
 from app.services.hotspots import detect_hotspots
+from app.services.notices import authority_notices, issue_notice, notice_document, public_notices, read_notice_file, withdraw_notice
 from app.services.priority import WEIGHTS
 from app.services.reports import build_csv, build_pdf
 from app.services.workspace import (
@@ -139,6 +140,84 @@ def _authority(session, authorization: str | None) -> User:
 
 def _scope(user: User, department: str | None) -> str | None:
     return scope_department(user.role, user.department, department)
+
+
+@router.get("/notices")
+def notices():
+    def work(session):
+        return {"notices": public_notices(session)}
+
+    return _run(work)
+
+
+@router.get("/authority/notices")
+def desk_notices(department: str | None = None, authorization: str | None = Header(None)):
+    def work(session):
+        user = _authority(session, authorization)
+        return {"notices": authority_notices(session, _scope(user, department))}
+
+    return _run(work)
+
+
+@router.post("/authority/notices")
+def create_notice(
+    title: str = Form(...),
+    kind: Literal["warning", "closure", "advisory", "circular"] = Form(...),
+    body: str = Form(""),
+    department: str | None = Form(None),
+    area: str | None = Form(None),
+    effective_until: str | None = Form(None),
+    document: UploadFile | None = File(None),
+    authorization: str | None = Header(None),
+):
+    payload = document.file.read() if document is not None and document.filename else b""
+    filename = document.filename if document is not None else None
+
+    def work(session):
+        user = _authority(session, authorization)
+        stored = read_notice_file(payload, filename) if payload else None
+        return {
+            "notice": issue_notice(
+                session,
+                user,
+                {
+                    "title": title,
+                    "body": body,
+                    "kind": kind,
+                    "department": department,
+                    "area": area,
+                    "effective_until": effective_until,
+                },
+                stored,
+            )
+        }
+
+    return _run(work)
+
+
+@router.get("/notices/{notice_id}/file")
+def notice_file(notice_id: uuid.UUID):
+    session = _session()
+    try:
+        payload, media_type, filename = notice_document(session, notice_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    finally:
+        session.close()
+    return Response(
+        content=payload,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"', "Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.post("/authority/notices/{notice_id}/withdraw")
+def close_notice(notice_id: uuid.UUID, authorization: str | None = Header(None)):
+    def work(session):
+        user = _authority(session, authorization)
+        return {"notice": withdraw_notice(session, user, notice_id)}
+
+    return _run(work)
 
 
 @router.get("/departments")

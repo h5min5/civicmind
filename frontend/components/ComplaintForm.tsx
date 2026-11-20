@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { transcribeSpeech } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import { compressImage } from "@/lib/format";
 import { readBrowserLocation, type Coords } from "@/lib/locate";
 
@@ -9,18 +11,6 @@ const LocationPicker = dynamic(() => import("@/components/LocationPicker").then(
   ssr: false,
   loading: () => <div className="map-frame picker-map" role="status">Loading the map…</div>,
 });
-
-type SpeechResult = { results: ArrayLike<ArrayLike<{ transcript: string }>> };
-
-type SpeechEngine = {
-  lang: string;
-  interimResults: boolean;
-  onresult: ((event: SpeechResult) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
 
 type Props = {
   submitting: boolean;
@@ -30,26 +20,36 @@ type Props = {
 };
 
 const LANGUAGES = [
-  { value: "en", label: "English", speech: "en-IN" },
-  { value: "hi", label: "Hindi", speech: "hi-IN" },
-  { value: "mr", label: "Marathi", speech: "mr-IN" },
+  { value: "en", label: "English" },
+  { value: "hi", label: "Hindi" },
+  { value: "mr", label: "Marathi" },
 ];
 
 export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props) {
+  const { t } = useLocale();
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("en");
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceNote, setVoiceNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const previewRef = useRef<string | null>(null);
-  const speechRef = useRef<SpeechEngine | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const stopTimerRef = useRef<number | null>(null);
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   useEffect(() => {
     return () => {
       if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-      speechRef.current?.stop();
+      if (stopTimerRef.current != null) window.clearTimeout(stopTimerRef.current);
+      if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
@@ -82,37 +82,80 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
     }
   }
 
-  function toggleVoice() {
+  function stopRecording() {
+    if (stopTimerRef.current != null) {
+      window.clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+  }
+
+  async function toggleVoice() {
     setError(null);
+    setVoiceNote(null);
     if (listening) {
-      speechRef.current?.stop();
-      setListening(false);
+      stopRecording();
       return;
     }
-    const browser = window as Window & { SpeechRecognition?: new () => SpeechEngine; webkitSpeechRecognition?: new () => SpeechEngine };
-    const Ctor = browser.SpeechRecognition || browser.webkitSpeechRecognition;
-    if (!Ctor) {
+    if (transcribing || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError("This browser has no voice input. Type the complaint instead.");
       return;
     }
-    const engine = new Ctor();
-    engine.lang = LANGUAGES.find((item) => item.value === language)?.speech ?? "en-IN";
-    engine.interimResults = false;
-    engine.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join(" ")
-        .trim();
-      if (transcript) setText((current) => (current ? `${current} ${transcript}` : transcript));
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("Allow the microphone to dictate a complaint.");
+      return;
+    }
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: mime });
+    } catch {
+      recorder = new MediaRecorder(stream);
+    }
+    chunksRef.current = [];
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
     };
-    engine.onerror = (event) => {
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
       setListening(false);
-      setError(event.error === "not-allowed" ? "Allow the microphone to dictate a complaint." : "Voice input stopped.");
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      chunksRef.current = [];
+      if (blob.size < 800) {
+        setError("No words were heard. Speak again, closer to the microphone.");
+        return;
+      }
+      const body = new FormData();
+      body.append("audio", blob, "speech.webm");
+      body.append("hint", languageRef.current);
+      setTranscribing(true);
+      void transcribeSpeech(body)
+        .then((result) => {
+          setText((current) => (current ? `${current} ${result.text}` : result.text));
+          if (result.language === "en" || result.language === "hi" || result.language === "mr") {
+            setLanguage(result.language);
+          }
+          if (result.switched) {
+            const label = t(`lang.${result.language}`);
+            setVoiceNote(t("form.heard", { language: label }));
+          }
+        })
+        .catch((caught: unknown) => {
+          setError(caught instanceof Error ? caught.message : "The recording could not be transcribed.");
+        })
+        .finally(() => setTranscribing(false));
     };
-    engine.onend = () => setListening(false);
-    speechRef.current = engine;
-    engine.start();
+    streamRef.current = stream;
+    recorderRef.current = recorder;
+    recorder.start();
     setListening(true);
+    stopTimerRef.current = window.setTimeout(() => stopRecording(), 60000);
   }
 
   async function submit(event: FormEvent) {
@@ -128,8 +171,8 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
   return (
     <form className="card form" id="report" onSubmit={submit}>
       <div>
-        <p className="eyebrow">New report</p>
-        <h2>File a civic complaint</h2>
+        <p className="eyebrow">{t("form.eyebrow")}</p>
+        <h2>{t("form.title")}</h2>
       </div>
       <div className="language-row" role="radiogroup" aria-label="Complaint language">
         {LANGUAGES.map((item) => (
@@ -140,12 +183,12 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
             aria-pressed={language === item.value}
             onClick={() => setLanguage(item.value)}
           >
-            {item.label}
+            {t(`lang.${item.value}`)}
           </button>
         ))}
       </div>
       <label className="field">
-        What is happening?
+        {t("form.what")}
         <textarea
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -156,16 +199,16 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
         />
       </label>
       <div className="photo-actions">
-        <button className="button secondary" type="button" onClick={toggleVoice} disabled={submitting}>
-          {listening ? "Stop listening" : "Speak"}
+        <button className="button secondary" type="button" onClick={() => void toggleVoice()} disabled={submitting || transcribing}>
+          {listening ? t("form.stop") : transcribing ? t("form.detecting") : t("form.speak")}
         </button>
-        <p className="hint">Voice uses this browser in English, Hindi, or Marathi. The written text is what gets checked.</p>
+        <p className="hint">{voiceNote ?? t("form.voiceHint")}</p>
       </div>
       <div className="field">
-        <span>Photo, optional</span>
+        <span>{t("form.photo")}</span>
         <div className="photo-actions">
           <label className="button secondary file-button">
-            Take photo
+            {t("form.take")}
             <input
               type="file"
               accept="image/*"
@@ -177,7 +220,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
             />
           </label>
           <label className="button secondary file-button">
-            Upload photo
+            {t("form.upload")}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
@@ -188,7 +231,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
             />
           </label>
         </div>
-        <p className="hint">A photo is checked against the text. A selfie, a meal, or an unrelated picture is rejected.</p>
+        <p className="hint">{t("form.photoHint")}</p>
         {preview && (
           <div className="preview">
             <img src={preview} alt="Selected complaint photo" />
@@ -202,15 +245,15 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
                 setImage(null);
               }}
             >
-              Remove
+              {t("form.remove")}
             </button>
           </div>
         )}
       </div>
       <div className="field">
-        <span>Location</span>
+        <span>{t("form.location")}</span>
         <button className="button secondary" type="button" onClick={() => void useLocation()} disabled={locating || submitting}>
-          {locating ? "Finding you…" : "Use my location"}
+          {locating ? t("form.finding") : t("form.myLocation")}
         </button>
         {coords && (
           <p className="coords">
@@ -224,7 +267,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
       </div>
       {error && <p className="form-error">{error}</p>}
       <button className="button wide" type="submit" disabled={submitting || text.trim().length < 8 || !coords}>
-        {submitting ? "Checking the complaint…" : "Submit complaint"}
+        {submitting ? t("form.checking") : t("form.submit")}
       </button>
     </form>
   );

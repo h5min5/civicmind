@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     database_url: str
     groq_api_key: str
     groq_model: str = "qwen/qwen3.6-27b"
+    groq_whisper_model: str = "whisper-large-v3-turbo"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     embedding_base_url: str
     embedding_api_key: str = ""

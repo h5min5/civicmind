@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { SubmitResult } from "@/lib/api";
 import { PriorityMeter } from "@/components/PriorityMeter";
 import { categoryLabel, formatDistance, formatGap, formatWhen, labelize } from "@/lib/format";
+import { ViewText } from "@/lib/i18n";
 
 type Props = {
   submitting: boolean;
@@ -60,7 +61,7 @@ export function ResultCard({ submitting, result, error }: Props) {
             {categoryLabel(result.features.issue_category)}
           </p>
           <h3 style={{ marginTop: 10 }}>{labelize(result.features.issue_type)}</h3>
-          <p className="lede">{result.features.description}</p>
+          <p className="lede"><ViewText text={result.features.description} /></p>
           <div className="meta" style={{ marginTop: 10 }}>
             <span className={`badge ${result.features.severity}`}>{result.features.severity}</span>
             <span>Confidence {Math.round(result.features.confidence * 100)}%</span>

@@ -13,6 +13,7 @@ from app.services.embeddings import get_embedding_client, to_pgvector
 from app.services.geocode import lookup_area
 from app.services.groq_vision import Analysis, semantic_text
 from app.services.matching import Candidate, Decision, Thresholds, evaluate_candidates
+from app.services.translate import ensure_english
 from app.services.workspace import finalize_submission
 
 logger = logging.getLogger("civicmind")
@@ -34,7 +35,7 @@ def submit_complaint(
 ) -> tuple[Complaint, Incident, Decision, int]:
     if analysis.features is None:
         raise RuntimeError("Only accepted complaints can be stored.")
-    features = analysis.features
+    features = analysis.features.model_copy(update={"description": ensure_english(session, analysis.features.description)})
     settings = get_settings()
     area = lookup_area(latitude, longitude)
     session.execute(text("SELECT pg_advisory_xact_lock(451234)"))

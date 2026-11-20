@@ -177,6 +177,39 @@ class KnowledgeChunk(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(), nullable=True)
 
 
+class Notice(Base):
+    __tablename__ = "notices"
+    __table_args__ = (
+        CheckConstraint("kind IN ('warning','closure','advisory','circular')", name="ck_notice_kind"),
+        CheckConstraint("status IN ('active','withdrawn')", name="ck_notice_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reference_code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    department: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    area: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active", index=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    issued_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    file_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    file_media_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    file_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+
+
+class Translation(Base):
+    __tablename__ = "translations"
+
+    source_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    target: Mapped[str] = mapped_column(String(8), primary_key=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class AppMeta(Base):
     __tablename__ = "app_meta"
 

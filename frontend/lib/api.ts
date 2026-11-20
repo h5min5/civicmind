@@ -74,6 +74,13 @@ export type SubmitResult = {
   priority?: PriorityScore | null;
 };
 
+export type AuthorityUpdate = {
+  id: string;
+  kind: "note" | "status" | string;
+  message: string;
+  created_at: string;
+};
+
 export type ComplaintRecord = {
   id: string;
   original_text: string;
@@ -94,6 +101,7 @@ export type ComplaintRecord = {
   distance_m: number | null;
   tracking_code?: string | null;
   language?: string | null;
+  updates?: AuthorityUpdate[];
 };
 
 export type IncidentRecord = {
@@ -114,6 +122,7 @@ export type IncidentRecord = {
   tracking_code?: string | null;
   summary?: string | null;
   priority?: PriorityScore;
+  updates?: AuthorityUpdate[];
 };
 
 export type Filters = {
@@ -201,6 +210,21 @@ export function fetchHealth() {
   return request<Health>("/api/health");
 }
 
+export function translateTexts(texts: string[], target: "hi" | "mr" | "en") {
+  return request<{ translations: string[] }>("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts, target }),
+  }).then((body) => body.translations);
+}
+
+export function transcribeSpeech(body: FormData) {
+  return request<{ text: string; language: "en" | "hi" | "mr" | string; switched: boolean }>("/api/speech", {
+    method: "POST",
+    body,
+  });
+}
+
 export function submitComplaint(body: FormData) {
   return request<SubmitResult>("/api/complaints", { method: "POST", body });
 }
@@ -213,6 +237,60 @@ export function fetchComplaints(filters: Filters, coords: { latitude: number; lo
 export function fetchIncidents(filters: Filters, coords: { latitude: number; longitude: number } | null) {
   const params = filterQuery(filters, coords);
   return request<{ incidents: IncidentRecord[] }>(`/api/incidents?${params.toString()}`);
+}
+
+export type CivicNotice = {
+  id: string;
+  reference_code: string;
+  title: string;
+  body: string;
+  kind: "warning" | "closure" | "advisory" | "circular";
+  department: string | null;
+  department_name: string;
+  area: string | null;
+  status: "active" | "withdrawn";
+  effective_from: string;
+  effective_until: string | null;
+  issued_by: string;
+  file_name: string | null;
+  file_media_type: string | null;
+  file_path: string | null;
+  created_at: string;
+  withdrawn_at: string | null;
+};
+
+export function fetchNotices() {
+  return request<{ notices: CivicNotice[] }>("/api/notices");
+}
+
+export function fetchAuthorityNotices(department: string) {
+  return request<{ notices: CivicNotice[] }>(`/api/authority/notices${deptQuery(department)}`);
+}
+
+export function issueNotice(
+  fields: {
+    title: string;
+    body: string;
+    kind: string;
+    department: string | null;
+    area: string | null;
+    effective_until: string | null;
+  },
+  file: File | null,
+) {
+  const body = new FormData();
+  body.append("title", fields.title);
+  body.append("body", fields.body);
+  body.append("kind", fields.kind);
+  if (fields.department) body.append("department", fields.department);
+  if (fields.area) body.append("area", fields.area);
+  if (fields.effective_until) body.append("effective_until", fields.effective_until);
+  if (file) body.append("document", file, file.name);
+  return request<{ notice: CivicNotice }>("/api/authority/notices", { method: "POST", body });
+}
+
+export function withdrawNotice(id: string) {
+  return request<{ notice: CivicNotice }>(`/api/authority/notices/${id}/withdraw`, { method: "POST" });
 }
 
 export function fetchAreas() {

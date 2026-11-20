@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { askCitizen } from "@/lib/api";
+import { useLocale, useTranslations, ViewText } from "@/lib/i18n";
 
 type Turn = { role: "you" | "civic"; text: string; sources?: { title: string; source: string; excerpt: string }[]; mode?: string };
 
@@ -13,6 +14,8 @@ const PROMPTS = [
 ];
 
 export default function AssistantPage() {
+  const { t } = useLocale();
+  const prompts = useTranslations(PROMPTS);
   const [question, setQuestion] = useState("");
   const [code, setCode] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -39,7 +42,7 @@ export default function AssistantPage() {
   return (
     <main className="page">
       <section className="intro">
-        <h1>Ask before you file.</h1>
+        <h1>{t("assistant.title")}</h1>
         <p>
           The assistant answers from CivicMind’s operating notes and, if you add a tracking code, from that complaint’s stored
           status. It does not invent counts or circular numbers.
@@ -51,9 +54,9 @@ export default function AssistantPage() {
           <input value={code} onChange={(event) => setCode(event.target.value)} placeholder="CM- or INC-" />
         </label>
         <div className="language-row">
-          {PROMPTS.map((prompt) => (
+          {PROMPTS.map((prompt, index) => (
             <button key={prompt} className="chip" type="button" onClick={() => void ask(prompt)} disabled={busy}>
-              {prompt}
+              {prompts[index] || prompt}
             </button>
           ))}
         </div>
@@ -61,7 +64,7 @@ export default function AssistantPage() {
           {turns.length === 0 && <p className="empty">Ask about reporting, routing, duplicates, or a tracking code.</p>}
           {turns.map((turn, index) => (
             <article key={`${turn.role}-${index}`} className={turn.role === "you" ? "bubble you" : "bubble"}>
-              <p>{turn.text}</p>
+              <p>{turn.role === "civic" ? <ViewText text={turn.text} /> : turn.text}</p>
               {turn.mode && <p className="quiet">{turn.mode === "model" ? "Answered by the language model from the notes below." : "Assembled from retrieved notes. The language model was not used."}</p>}
               {turn.sources && turn.sources.length > 0 && (
                 <ul className="sources">

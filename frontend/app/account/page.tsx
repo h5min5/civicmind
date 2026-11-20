@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { fetchMyComplaints, fetchNotifications, markAllNotificationsRead, type SessionUser } from "@/lib/api";
 import { departmentLabel, formatWhen, labelize, statusLabel } from "@/lib/format";
+import { useLocale, ViewText } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 export default function AccountPage() {
   const { user, ready, signIn, signUp, signOut } = useSession();
+  const { t } = useLocale();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -42,7 +44,7 @@ export default function AccountPage() {
   return (
     <main className="page">
       <section className="intro">
-        <h1>{user ? user.name : "Your civic record"}</h1>
+        <h1>{user ? user.name : t("account.guest")}</h1>
         <p>
           {user
             ? `${user.email} · ${user.role === "citizen" ? "Citizen" : user.role === "admin" ? "Administrator" : departmentLabel(user.department)}`
@@ -53,10 +55,10 @@ export default function AccountPage() {
         <form className="card form" onSubmit={submit}>
           <div className="language-row">
             <button type="button" className={mode === "in" ? "chip on" : "chip"} onClick={() => setMode("in")}>
-              Sign in
+              {t("account.in")}
             </button>
             <button type="button" className={mode === "up" ? "chip on" : "chip"} onClick={() => setMode("up")}>
-              Create account
+              {t("account.up")}
             </button>
           </div>
           {mode === "up" && (
@@ -123,7 +125,7 @@ export default function AccountPage() {
                     <span className="badge">{departmentLabel(item.department)}</span>
                   </header>
                   <h3>{labelize(String(item.issue_type || "complaint"))}</h3>
-                  <p>{item.description}</p>
+                  <p><ViewText text={item.description} /></p>
                   <div className="meta">
                     {item.tracking_code && (
                       <Link href={`/track/${item.tracking_code}`}>{item.tracking_code}</Link>

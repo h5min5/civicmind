@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useLocale, ViewLanguageSelect } from "@/lib/i18n";
 import { useSession } from "@/lib/session";
 
 const LINKS = [
-  { href: "/", label: "Report" },
-  { href: "/complaints", label: "Map" },
-  { href: "/history", label: "Archive" },
-  { href: "/assistant", label: "Assistant" },
-  { href: "/account", label: "Account" },
-  { href: "/authority", label: "Command" },
+  { href: "/", key: "nav.report" },
+  { href: "/complaints", key: "nav.map" },
+  { href: "/history", key: "nav.archive" },
+  { href: "/notices", key: "nav.notices" },
+  { href: "/assistant", key: "nav.assistant" },
+  { href: "/account", key: "nav.account" },
+  { href: "/authority", key: "nav.command" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
   const { user } = useSession();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -49,11 +52,12 @@ export function SiteHeader() {
       <nav id="site-nav" className={open ? "nav open" : "nav"} aria-label="Sections">
         {LINKS.map((link) => (
           <Link key={link.href} href={link.href} aria-current={pathname === link.href ? "page" : undefined}>
-            {link.label}
+            {t(link.key)}
           </Link>
         ))}
         {user && <p className="nav-user nav-user-menu">{user.name}</p>}
       </nav>
+      <ViewLanguageSelect />
       {user && <p className="nav-user nav-user-bar">{user.name}</p>}
     </header>
   );
