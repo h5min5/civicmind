@@ -14,7 +14,7 @@ from app.services.auth import hash_password
 from app.services.departments import DEPARTMENT_IDS, catalog, department_name
 from app.services.embeddings import ProviderError
 from app.services.forecast import archive_path, archive_snapshot, load_archive, routing_agreement
-from app.services.hotspots import detect_hotspots
+from app.services.hotspots import detect_hotspots, simulate_intervention
 from app.services.priority import WEIGHTS
 from app.services.reports import build_csv, build_pdf
 from app.services.workspace import (
@@ -73,6 +73,14 @@ class BulkPatch(BaseModel):
     status: Literal["open", "in_progress", "resolved"]
     note: str | None = None
     resolution: str | None = None
+
+
+class InterventionBody(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    intervention: Literal["cleanup", "repair", "drain_cleaning", "street_lighting", "inspection"]
+    capacity_pct: int = Field(default=50, ge=0, le=100)
+    duration_days: int = Field(default=30, ge=1, le=90)
 
 
 class FeedbackBody(BaseModel):
@@ -465,6 +473,42 @@ def authority_hotspots(department: str | None = None, authorization: str | None 
 
         archive = archive_snapshot(None if scope in {None, "unassigned"} else scope)
         return {"live": detect_hotspots(points), "area_health": area_health(points), "archive": archive}
+
+    return _run(work)
+
+
+@router.post("/authority/hotspots/simulate")
+def simulate_hotspot(body: InterventionBody, department: str | None = None, authorization: str | None = Header(None)):
+    def work(session):
+        user = _authority(session, authorization)
+        scope = _scope(user, department)
+        issues = load_issues(session, scope)
+        points = [
+            {
+                "latitude": item["latitude"],
+                "longitude": item["longitude"],
+                "last_reported_at": item["last_reported_at"],
+                "report_count": item["report_count"],
+                "status": item["status"],
+                "issue_category": item["issue_category"],
+                "area": item["area"],
+            }
+            for item in issues
+        ]
+        from app.services.hotspots import cell_key
+
+        selected = next(
+            (
+                spot
+                for spot in detect_hotspots(points)
+                if abs(spot["latitude"] - body.latitude) < 0.005
+                and abs(spot["longitude"] - body.longitude) < 0.005
+            ),
+            None,
+        )
+        if selected is None:
+            raise LookupError("Select an active hotspot from this workspace.")
+        return simulate_intervention(selected, body.intervention, body.capacity_pct, body.duration_days)
 
     return _run(work)
 

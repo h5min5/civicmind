@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.services.departments import department_for_category, infer_department
 from app.services.priority import combine, duration_score, location_score, priority_for_incident, volume_score
+from app.services.hotspots import simulate_intervention
 
 
 class DepartmentRoutingTests(unittest.TestCase):
@@ -26,6 +27,29 @@ class DepartmentRoutingTests(unittest.TestCase):
         department, _reason, confidence = infer_department("other", "unknown issue", "Some unclear problem")
         self.assertIsNone(department)
         self.assertEqual(confidence, 0.0)
+
+
+class InterventionSimulationTests(unittest.TestCase):
+    def test_intervention_returns_bounded_scenario(self):
+        result = simulate_intervention(
+            {"open_incidents": 10, "report_count": 20, "recent_incidents": 6},
+            "drain_cleaning",
+            50,
+            30,
+        )
+        self.assertLessEqual(result["estimated_residual_open_incidents"], 10)
+        self.assertGreater(result["estimated_risk_reduction_pct"], 0)
+        self.assertIn("planning estimate", result["method"].lower())
+
+    def test_intervention_input_limits_are_bounded(self):
+        result = simulate_intervention(
+            {"open_incidents": 2, "report_count": 4, "recent_incidents": 1},
+            "cleanup",
+            500,
+            500,
+        )
+        self.assertEqual(result["capacity_pct"], 100)
+        self.assertEqual(result["duration_days"], 90)
 
 
 class PriorityTests(unittest.TestCase):

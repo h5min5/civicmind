@@ -544,6 +544,26 @@ export function fetchHotspots(department: string) {
   return request<{ live: Hotspot[]; area_health: AnalyticsPayload["area_health"]; archive: ArchiveSnapshot }>(`/api/authority/hotspots${deptQuery(department)}`);
 }
 
+export type InterventionResult = {
+  intervention: string;
+  intervention_label: string;
+  capacity_pct: number;
+  duration_days: number;
+  baseline_open_incidents: number;
+  estimated_residual_open_incidents: number;
+  estimated_open_incidents_resolved: number;
+  estimated_fewer_reports: number;
+  estimated_risk_reduction_pct: number;
+  method: string;
+};
+
+export function simulateHotspot(department: string, body: { latitude: number; longitude: number; intervention: string; capacity_pct: number; duration_days: number }) {
+  return request<InterventionResult>(`/api/authority/hotspots/simulate${deptQuery(department)}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function fetchAlerts(department: string) {
   return request<{ alerts: { kind: string; incident_id: string | null; tracking_code: string | null; title: string; detail: string }[] }>(
     `/api/authority/alerts${deptQuery(department)}`,

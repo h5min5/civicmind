@@ -30,11 +30,13 @@ import {
   imageUrl,
   patchIncident,
   summarizeIncident,
+  simulateHotspot,
   uploadEvidence,
   type AnalyticsPayload,
   type AuthorityIssue,
   type EvaluationPayload,
   type Hotspot,
+  type InterventionResult,
   type IncidentDetail,
   type Overview,
   type SessionUser,
@@ -339,7 +341,7 @@ export function CommandCenter() {
           </section>
         )}
         {view === "analytics" && <AnalyticsBoard data={analytics} />}
-        {view === "hotspots" && <HotspotBoard live={hotspots} archive={analytics?.archive ?? null} health={analytics?.area_health ?? null} />}
+        {view === "hotspots" && <HotspotBoard live={hotspots} archive={analytics?.archive ?? null} health={analytics?.area_health ?? null} department={scope} />}
         {view === "copilot" && <Copilot department={scope} incidentId={detail?.id} />}
         {view === "evaluation" && <EvaluationBoard data={evaluation} />}
         {view === "activity" && (
@@ -727,11 +729,41 @@ function HotspotBoard({
   live,
   archive,
   health,
+  department,
 }: {
   live: Hotspot[] | null;
   archive: AnalyticsPayload["archive"] | null;
   health: AnalyticsPayload["area_health"] | null;
+  department: string;
 }) {
+  const [selected, setSelected] = useState(0);
+  const [intervention, setIntervention] = useState("cleanup");
+  const [capacity, setCapacity] = useState(50);
+  const [duration, setDuration] = useState(30);
+  const [simulation, setSimulation] = useState<InterventionResult | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
+
+  async function runSimulation() {
+    if (!live?.length) return;
+    const spot = live[Math.min(selected, live.length - 1)];
+    setSimulating(true);
+    setSimulationError(null);
+    try {
+      setSimulation(await simulateHotspot(department, {
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        intervention,
+        capacity_pct: capacity,
+        duration_days: duration,
+      }));
+    } catch (caught) {
+      setSimulationError(caught instanceof Error ? caught.message : "Could not run the intervention scenario.");
+    } finally {
+      setSimulating(false);
+    }
+  }
+
   return (
     <section className="command-view">
       <article className="panel">
@@ -748,6 +780,50 @@ function HotspotBoard({
             </li>
           ))}
         </ul>
+      </article>
+      <article className="panel">
+        <h2>Intervention simulation</h2>
+        <p className="hint">Scenario planning only. Results are estimates and do not claim measured causal impact.</p>
+        {live?.length ? (
+          <div className="filters">
+            <select value={selected} onChange={(event) => { setSelected(Number(event.target.value)); setSimulation(null); }}>
+              {live.map((spot, index) => (
+                <option key={`${spot.latitude}-${spot.longitude}`} value={index}>{spot.area || "Unnamed cell"} · {labelize(spot.dominant_category)}</option>
+              ))}
+            </select>
+            <select value={intervention} onChange={(event) => { setIntervention(event.target.value); setSimulation(null); }}>
+              <option value="cleanup">More frequent cleanup</option>
+              <option value="repair">Targeted repair campaign</option>
+              <option value="drain_cleaning">Drain cleaning</option>
+              <option value="street_lighting">Street-light repair</option>
+              <option value="inspection">Extra inspections</option>
+            </select>
+            <label>Capacity
+              <input type="range" min="0" max="100" step="10" value={capacity} onChange={(event) => { setCapacity(Number(event.target.value)); setSimulation(null); }} />
+              <small>{capacity}%</small>
+            </label>
+            <label>Duration
+              <input type="number" min="1" max="90" value={duration} onChange={(event) => { setDuration(Number(event.target.value)); setSimulation(null); }} />
+              <small>days</small>
+            </label>
+            <button type="button" className="button" disabled={simulating} onClick={() => void runSimulation()}>
+              {simulating ? "Simulating…" : "Run scenario"}
+            </button>
+          </div>
+        ) : (
+          <p className="empty">A live hotspot is required to run a scenario.</p>
+        )}
+        {simulationError && <p className="error-text">{simulationError}</p>}
+        {simulation && (
+          <div className="status-pills">
+            <span>{simulation.intervention_label}</span>
+            <span>{simulation.estimated_open_incidents_resolved} open incidents resolved</span>
+            <span>{simulation.estimated_residual_open_incidents} residual open</span>
+            <span>{simulation.estimated_fewer_reports} fewer reports</span>
+            <span>{simulation.estimated_risk_reduction_pct}% risk reduction</span>
+          </div>
+        )}
+        {simulation && <p className="hint">Baseline: {simulation.baseline_open_incidents} open incidents. {simulation.method}</p>}
       </article>
       {health && (
         <article className="panel">

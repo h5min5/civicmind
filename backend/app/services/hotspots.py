@@ -90,6 +90,54 @@ def detect_hotspots(points: list[dict], now: datetime | None = None) -> list[dic
     return found
 
 
+INTERVENTIONS = {
+    "cleanup": (0.22, "More frequent collection and cleanup"),
+    "repair": (0.28, "Targeted repair campaign"),
+    "drain_cleaning": (0.32, "Drain cleaning and obstruction removal"),
+    "street_lighting": (0.18, "Street-light repair and inspection"),
+    "inspection": (0.16, "Additional inspections and preventive checks"),
+}
+
+
+def simulate_intervention(spot: dict, intervention: str, capacity_pct: int, duration_days: int) -> dict:
+    """Transparent scenario estimate; this is a planning aid, not a statistical forecast."""
+    if intervention not in INTERVENTIONS:
+        raise ValueError("Unknown intervention.")
+    capacity_pct = max(0, min(100, capacity_pct))
+    duration_days = max(1, min(90, duration_days))
+    base_effect, label = INTERVENTIONS[intervention]
+    open_count = int(spot.get("open_incidents") or 0)
+    report_count = int(spot.get("report_count") or 0)
+    recent = int(spot.get("recent_incidents") or 0)
+
+    capacity_factor = capacity_pct / 100
+    duration_factor = min(duration_days / 30, 1.5)
+    severity_factor = 1 + min(recent / 10, 0.5)
+    estimated_reduction = round(base_effect * capacity_factor * duration_factor * severity_factor, 3)
+    estimated_reduction = max(0.05, min(0.75, estimated_reduction))
+
+    baseline_open = max(open_count, 1)
+    residual_open = max(0, round(baseline_open * (1 - estimated_reduction)))
+    fewer_reports = max(0, round(report_count * estimated_reduction))
+    risk_reduction = round(estimated_reduction * 100, 1)
+
+    return {
+        "intervention": intervention,
+        "intervention_label": label,
+        "capacity_pct": capacity_pct,
+        "duration_days": duration_days,
+        "baseline_open_incidents": baseline_open,
+        "estimated_residual_open_incidents": residual_open,
+        "estimated_open_incidents_resolved": baseline_open - residual_open,
+        "estimated_fewer_reports": fewer_reports,
+        "estimated_risk_reduction_pct": risk_reduction,
+        "method": (
+            "Planning estimate based on intervention effectiveness, capacity, duration, and recent hotspot activity. "
+            "Assumes no major external change and does not claim measured causal impact."
+        ),
+    }
+
+
 def area_health(points: list[dict]) -> dict:
     """Compare localities that actually appear on stored incidents.
 
