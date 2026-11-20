@@ -4,18 +4,21 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.departments import department_name
+from app.services.priority import priority_for_incident
+
 IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPLAINT_COLUMNS = """
 id, original_text, image_path, issue_category, issue_type, issue_subtype,
-severity, severity_score, priority, department, routing_reason, status,
-matched_existing, description, visual_evidence, confidence, latitude, longitude,
-timestamp, incident_id, created_at
+severity, description, visual_evidence, confidence, latitude, longitude, area,
+timestamp, incident_id, created_at, tracking_code, language
 """
 
 INCIDENT_COLUMNS = """
-id, issue_category, issue_type, severity, latitude, longitude,
-first_reported_at, last_reported_at, report_count
+id, issue_category, issue_type, severity, latitude, longitude, area,
+first_reported_at, last_reported_at, report_count, department, status,
+resolved_at, tracking_code, summary, routing_reason, resolution_note, reopen_count
 """
 
 
@@ -26,6 +29,7 @@ def list_complaints(
     category: str | None,
     severity: str | None,
     issue_type: str | None,
+    area: str | None,
     date_from: date | None,
     date_to: date | None,
     near_lat: float | None,
@@ -40,7 +44,8 @@ def list_complaints(
         issue_type,
         date_from,
         date_to,
-        text_columns=("original_text", "description", "issue_type", "issue_subtype"),
+        area=area,
+        text_columns=("original_text", "description", "issue_type", "issue_subtype", "area"),
     )
     distance = "NULL::double precision"
     order = "timestamp DESC"
@@ -81,6 +86,7 @@ def list_incidents(
     category: str | None,
     severity: str | None,
     issue_type: str | None,
+    area: str | None,
     date_from: date | None,
     date_to: date | None,
     near_lat: float | None,
@@ -95,7 +101,8 @@ def list_incidents(
         issue_type,
         date_from,
         date_to,
-        text_columns=("issue_type", "issue_category"),
+        area=area,
+        text_columns=("issue_type", "issue_category", "area"),
         time_column="last_reported_at",
     )
     distance = "NULL::double precision"
@@ -127,7 +134,7 @@ def list_incidents(
     LIMIT :limit
     """
     rows = session.execute(text(sql), params).mappings().all()
-    return [_record(row) for row in rows]
+    return [_with_priority(_record(row)) for row in rows]
 
 
 def _filters(
@@ -139,6 +146,7 @@ def _filters(
     date_to: date | None,
     text_columns: tuple[str, ...],
     time_column: str = "timestamp",
+    area: str | None = None,
 ) -> tuple[list[str], dict]:
     clauses = ["1=1"]
     params: dict = {}
@@ -151,6 +159,9 @@ def _filters(
     if issue_type:
         clauses.append("issue_type ILIKE :issue_type ESCAPE '\\'")
         params["issue_type"] = f"%{_escape_like(issue_type)}%"
+    if area:
+        clauses.append("area = :area")
+        params["area"] = area
     if q:
         like = f"%{_escape_like(q)}%"
         parts = [f"{column} ILIKE :q ESCAPE '\\'" for column in text_columns]
@@ -165,8 +176,42 @@ def _filters(
     return clauses, params
 
 
+def list_areas(session: Session) -> list[str]:
+    rows = session.execute(
+        text(
+            """
+            SELECT area FROM (
+              SELECT area FROM complaints WHERE area IS NOT NULL AND btrim(area) <> ''
+              UNION
+              SELECT area FROM incidents WHERE area IS NOT NULL AND btrim(area) <> ''
+            ) names
+            ORDER BY area
+            """
+        )
+    ).scalars().all()
+    return [str(row) for row in rows]
+
+
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _with_priority(item: dict) -> dict:
+    started = datetime.fromisoformat(item["first_reported_at"])
+    resolved = datetime.fromisoformat(item["resolved_at"]) if item.get("resolved_at") else None
+    item["priority"] = priority_for_incident(
+        category=item["issue_category"],
+        severity=item["severity"],
+        report_count=int(item["report_count"]),
+        latitude=float(item["latitude"]),
+        longitude=float(item["longitude"]),
+        area=item.get("area"),
+        started_at=started,
+        status=item.get("status") or "open",
+        resolved_at=resolved,
+    )
+    item["department_name"] = department_name(item.get("department"))
+    return item
 
 
 def _record(row) -> dict:

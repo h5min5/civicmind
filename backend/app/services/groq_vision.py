@@ -16,7 +16,8 @@ SYSTEM_PROMPT = """You are CivicMind, a strict validator and extractor for civic
 
 Decide whether the citizen's text describes a plausible civic or urban issue, and, when a photo is attached, whether that photo actually shows a civic issue consistent with the text.
 
-Accept roads, footpaths, potholes, waterlogging, flooding, blocked drains, garbage, sewage, street lights, water supply, public property damage, fallen trees blocking a street, encroachment on public land, and similar municipal problems.
+The complaint may be written in English, Hindi, or Marathi. Understand all three, and write description in English.
+Accept roads, footpaths, potholes, waterlogging, flooding, blocked drains, garbage, sewage, street lights, water supply, public property damage, fallen trees blocking a street, encroachment on public land, traffic signals, exposed wires, mosquito breeding, and similar municipal problems.
 Swearing is acceptable when the text still describes a real civic problem.
 Reject random text, jokes, spam, greetings, tests, harassment with no civic issue, private consumer disputes, and personal matters.
 Reject the submission when an attached photo is a selfie, meme, food, pet, screenshot, blank image, or any scene that is not a civic issue, or when the photo contradicts the text.
@@ -38,7 +39,7 @@ Return one JSON object and nothing else, with exactly these keys:
   "confidence": 0.0
 }
 
-issue_category must be one of: road, drainage, water_supply, waste, sewage, streetlight, public_safety, trees_parks, encroachment, pollution, other.
+issue_category must be one of: road, drainage, water_supply, waste, sewage, streetlight, public_safety, trees_parks, encroachment, pollution, traffic, other.
 severity must be one of: low, medium, high, critical.
 image_shows_civic_issue is null when no image is attached, otherwise true or false.
 confidence is a number from 0 to 1.
@@ -168,6 +169,43 @@ def _complete(text: str, image: bytes | None, media_type: str | None) -> str:
     if not isinstance(message, str) or not message.strip():
         raise ProviderError("Groq returned an empty assessment.")
     return message
+
+
+def complete_chat(system: str, user: str, timeout: float = 40) -> str:
+    """Plain-text completion for assistants. Raises ProviderError when the model cannot be used."""
+    settings = get_settings()
+    payload = {
+        "model": settings.groq_model,
+        "temperature": 0.2,
+        "max_completion_tokens": 700,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    try:
+        response = httpx.post(
+            f"{settings.groq_base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=timeout,
+        )
+    except httpx.HTTPError as exc:
+        raise ProviderError(f"Could not reach Groq. {exc}") from exc
+    if response.status_code in {401, 403}:
+        raise ProviderError("The Groq API key was rejected. Check GROQ_API_KEY.")
+    if response.status_code >= 400:
+        raise ProviderError(f"Groq returned {response.status_code}: {response.text[:300]}")
+    body = response.json()
+    try:
+        message = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise ProviderError("Groq returned a response without text.") from exc
+    if isinstance(message, list):
+        message = "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in message)
+    if not isinstance(message, str) or not message.strip():
+        raise ProviderError("Groq returned an empty reply.")
+    return re.sub(r"<think>.*?</think>", "", message, flags=re.DOTALL).strip()
 
 
 def _extract_json(content: str) -> dict:

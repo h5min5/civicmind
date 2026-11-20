@@ -1,26 +1,23 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
 from sqlalchemy.orm import undefer
 
 from app.config import get_settings
 from app.database import SessionLocal, ping_database, safe_error
 from app.models import Complaint
-from app.services.dashboard import authority_stats, list_authority_complaints, normalize_status, update_complaint_status
+from app.services.auth import AuthError, resolve_user
+from app.services.departments import department_name
 from app.services.embeddings import ProviderError, cached_dimension, get_embedding_client
+from app.services.geocode import ensure_areas, lookup_area
 from app.services.groq_vision import analyze_complaint
 from app.services.pipeline import submit_complaint
-from app.services.queries import list_complaints, list_incidents
+from app.services.priority import priority_for_incident
+from app.services.queries import list_areas, list_complaints, list_incidents
 
 router = APIRouter()
-
-
-class StatusUpdateRequest(BaseModel):
-    status: str
-
 
 MAX_IMAGE_BYTES = 3_500_000
 SEVERITIES = {"low", "medium", "high", "critical"}
@@ -63,6 +60,8 @@ def create_complaint(
     latitude: float = Form(...),
     longitude: float = Form(...),
     image: UploadFile | None = File(None),
+    language: str | None = Form(None),
+    authorization: str | None = Header(None),
 ):
     complaint_text = _clean_text(text)
     _validate_coordinates(latitude, longitude)
@@ -83,6 +82,10 @@ def create_complaint(
     session = SessionLocal()
     try:
         with session.begin():
+            try:
+                user = resolve_user(session, authorization, required=False)
+            except AuthError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.message) from exc
             complaint, incident, decision, dimension = submit_complaint(
                 session,
                 complaint_text,
@@ -92,6 +95,8 @@ def create_complaint(
                 analysis,
                 image_bytes,
                 media_type,
+                citizen_id=user.id if user else None,
+                language=_language(language),
             )
             payload = _accepted(analysis, complaint, incident, decision, dimension)
         return payload
@@ -101,59 +106,23 @@ def create_complaint(
         session.close()
 
 
-@router.get("/authority/stats")
-def authority_summary():
-    database = ping_database()
-    if not database["ok"]:
-        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
-    session = SessionLocal()
-    try:
-        return authority_stats(session)
-    finally:
-        session.close()
-
-
-@router.get("/authority/complaints")
-def authority_complaints(
-    q: str | None = None,
-    department: str | None = None,
-    priority: str | None = None,
-    status: str | None = None,
-    issue_type: str | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
-    sort_by: str = Query(default="severity_score", pattern="(severity_score|date|priority)"),
+@router.get("/geocode")
+def geocode(
+    latitude: float = Query(ge=-90, le=90),
+    longitude: float = Query(ge=-180, le=180),
 ):
+    return {"area": lookup_area(latitude, longitude)}
+
+
+@router.get("/areas")
+def areas():
     database = ping_database()
     if not database["ok"]:
         raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
     session = SessionLocal()
     try:
-        return {"complaints": list_authority_complaints(
-            session,
-            q=_blank(q),
-            department=_blank(department),
-            priority=_blank(priority),
-            status=_blank(status),
-            issue_type=_blank(issue_type),
-            limit=limit,
-            sort_by=sort_by,
-        )}
-    finally:
-        session.close()
-
-
-@router.patch("/authority/complaints/{complaint_id}/status")
-def update_status(complaint_id: uuid.UUID, body: "StatusUpdateRequest"):
-    database = ping_database()
-    if not database["ok"]:
-        raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
-    session = SessionLocal()
-    try:
-        with session.begin():
-            updated = update_complaint_status(session, str(complaint_id), body.status)
-        return {"complaint_id": str(complaint_id), "status": updated["status"]}
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        ensure_areas(session)
+        return {"areas": list_areas(session)}
     finally:
         session.close()
 
@@ -164,12 +133,13 @@ def complaints(
     category: str | None = None,
     severity: str | None = None,
     issue_type: str | None = None,
+    area: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     near_lat: float | None = None,
     near_lng: float | None = None,
     radius_m: float | None = Query(default=None, gt=0, le=20000),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=200),
 ):
     _validate_search(severity, near_lat, near_lng, radius_m)
     if near_lat is not None and radius_m is None:
@@ -179,6 +149,7 @@ def complaints(
         raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
     session = SessionLocal()
     try:
+        ensure_areas(session)
         return {
             "complaints": list_complaints(
                 session,
@@ -186,6 +157,7 @@ def complaints(
                 category=_blank(category),
                 severity=_blank(severity),
                 issue_type=_blank(issue_type),
+                area=_blank(area),
                 date_from=date_from,
                 date_to=date_to,
                 near_lat=near_lat,
@@ -204,12 +176,13 @@ def incidents(
     category: str | None = None,
     severity: str | None = None,
     issue_type: str | None = None,
+    area: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     near_lat: float | None = None,
     near_lng: float | None = None,
     radius_m: float | None = Query(default=None, gt=0, le=20000),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=200),
 ):
     _validate_search(severity, near_lat, near_lng, radius_m)
     if near_lat is not None and radius_m is None:
@@ -219,6 +192,7 @@ def incidents(
         raise HTTPException(status_code=503, detail=database["error"] or "Database is unavailable.")
     session = SessionLocal()
     try:
+        ensure_areas(session)
         return {
             "incidents": list_incidents(
                 session,
@@ -226,6 +200,7 @@ def incidents(
                 category=_blank(category),
                 severity=_blank(severity),
                 issue_type=_blank(issue_type),
+                area=_blank(area),
                 date_from=date_from,
                 date_to=date_to,
                 near_lat=near_lat,
@@ -266,12 +241,6 @@ def _accepted(analysis, complaint: Complaint, incident, decision, dimension: int
             "image_shows_civic_issue": assessment.image_shows_civic_issue,
         },
         "features": analysis.features.model_dump(),
-        "issue_type": complaint.issue_type,
-        "department": complaint.department,
-        "routing_reason": complaint.routing_reason,
-        "severity_score": float(complaint.severity_score) if complaint.severity_score is not None else None,
-        "priority": complaint.priority,
-        "status": complaint.status,
         "complaint_id": str(complaint.id),
         "incident_id": str(incident.id),
         "matched_existing": decision.matched_existing,
@@ -285,6 +254,26 @@ def _accepted(analysis, complaint: Complaint, incident, decision, dimension: int
         "embedding_dimensions": dimension,
         "timestamp": complaint.timestamp.isoformat(),
         "thresholds": _thresholds(),
+        "tracking_code": complaint.tracking_code,
+        "incident_tracking_code": incident.tracking_code,
+        "department": incident.department,
+        "department_name": department_name(incident.department),
+        "routing_reason": incident.routing_reason,
+        "area": complaint.area,
+        "summary": incident.summary,
+        "severity_score": complaint.severity_score,
+        "status": incident.status,
+        "priority": priority_for_incident(
+            category=incident.issue_category,
+            severity=incident.severity,
+            report_count=incident.report_count,
+            latitude=incident.latitude,
+            longitude=incident.longitude,
+            area=incident.area,
+            started_at=incident.first_reported_at,
+            status=incident.status or "open",
+            resolved_at=incident.resolved_at,
+        ),
     }
 
 
@@ -311,6 +300,14 @@ def _rejected(assessment, timestamp: datetime) -> dict:
         "embedding_dimensions": None,
         "timestamp": timestamp.isoformat(),
         "thresholds": _thresholds(),
+        "tracking_code": None,
+        "incident_tracking_code": None,
+        "department": None,
+        "department_name": None,
+        "routing_reason": None,
+        "area": None,
+        "summary": None,
+        "priority": None,
     }
 
 
@@ -321,6 +318,15 @@ def _thresholds() -> dict:
         "geo_radius_meters": settings.geo_radius_meters,
         "time_window_hours": settings.time_window_hours,
     }
+
+
+def _language(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    key = value.strip().lower()
+    if key not in {"en", "hi", "mr"}:
+        raise HTTPException(status_code=400, detail="Language must be English, Hindi, or Marathi.")
+    return key
 
 
 def _clean_text(value: str) -> str:

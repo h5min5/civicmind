@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routers.api import router
+from app.routers.platform import router as platform_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("civicmind")
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router, prefix="/api")
+app.include_router(platform_router, prefix="/api")
 
 
 @app.get("/")

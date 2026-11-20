@@ -80,6 +80,10 @@ def init_db() -> None:
                 )
         Base.metadata.create_all(engine)
         with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE complaints ADD COLUMN IF NOT EXISTS area VARCHAR(120)"))
+            connection.execute(text("ALTER TABLE incidents ADD COLUMN IF NOT EXISTS area VARCHAR(120)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_complaints_area ON complaints (area)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_incidents_area ON incidents (area)"))
             connection.execute(
                 text(
                     """
@@ -115,7 +119,48 @@ def init_db() -> None:
                 )
         except Exception:
             logger.warning("HNSW index was not created; search still works on small tables", exc_info=True)
+        with engine.begin() as connection:
+            for statement in _MIGRATIONS:
+                connection.execute(text(statement))
+        from app.services.bootstrap import seed
+
+        seed()
         _initialized = True
+
+
+_MIGRATIONS = (
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS department VARCHAR(40)",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open'",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolution_note TEXT",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS routing_reason TEXT",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS summary TEXT",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS ai_summary TEXT",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(20)",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS priority_score DOUBLE PRECISION",
+    "ALTER TABLE incidents ADD COLUMN IF NOT EXISTS reopen_count INTEGER DEFAULT 0",
+    "ALTER TABLE complaints ADD COLUMN IF NOT EXISTS citizen_id UUID",
+    "ALTER TABLE complaints ADD COLUMN IF NOT EXISTS language VARCHAR(8)",
+    "ALTER TABLE complaints ADD COLUMN IF NOT EXISTS tracking_code VARCHAR(20)",
+    "UPDATE incidents SET status = 'open' WHERE status IS NULL",
+    "UPDATE incidents SET reopen_count = 0 WHERE reopen_count IS NULL",
+    "CREATE INDEX IF NOT EXISTS ix_incidents_department ON incidents (department)",
+    "CREATE INDEX IF NOT EXISTS ix_incidents_status ON incidents (status)",
+    """
+    DO $$ BEGIN
+      ALTER TABLE incidents
+        ADD CONSTRAINT ck_incident_status CHECK (status IN ('open','in_progress','resolved'));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$
+    """,
+    """
+    DO $$ BEGIN
+      ALTER TABLE complaints
+        ADD CONSTRAINT complaints_citizen_id_fkey FOREIGN KEY (citizen_id) REFERENCES users (id);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$
+    """,
+)
 
 
 def ping_database() -> dict:

@@ -1,11 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import type { ComplaintRecord, Filters, IncidentRecord } from "@/lib/api";
 import { imageUrl } from "@/lib/api";
-import { CATEGORIES, SEVERITIES, categoryLabel, formatDistance, formatWhen, labelize, mapLink } from "@/lib/format";
+import { CATEGORIES, SEVERITIES, categoryLabel, departmentLabel, formatDistance, formatWhen, labelize, mapLink, statusLabel } from "@/lib/format";
+import type { Coords } from "@/lib/locate";
 
-type Coords = { latitude: number; longitude: number; accuracy: number | null };
+const ComplaintMap = dynamic(() => import("@/components/ComplaintMap").then((mod) => mod.ComplaintMap), {
+  ssr: false,
+  loading: () => <div className="map-frame" role="status">Loading the Mumbai map…</div>,
+});
 
 type Props = {
   filters: Filters;
@@ -13,12 +18,27 @@ type Props = {
   onApply: () => void;
   complaints: ComplaintRecord[];
   incidents: IncidentRecord[];
+  areas: string[];
   loading: boolean;
   error: string | null;
   coords: Coords | null;
+  locating: boolean;
+  onLocate: () => void;
 };
 
-export function Records({ filters, onFilters, onApply, complaints, incidents, loading, error, coords }: Props) {
+export function Records({
+  filters,
+  onFilters,
+  onApply,
+  complaints,
+  incidents,
+  areas,
+  loading,
+  error,
+  coords,
+  locating,
+  onLocate,
+}: Props) {
   const [tab, setTab] = useState<"complaints" | "incidents">("complaints");
 
   function update<K extends keyof Filters>(key: K, value: Filters[K]) {
@@ -28,7 +48,8 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
   return (
     <section className="card">
       <p className="eyebrow">Already reported</p>
-      <h2>Recent complaints and incidents</h2>
+      <h1>Recent complaints and incidents</h1>
+      <ComplaintMap complaints={complaints} />
       <div className="tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "complaints"} onClick={() => setTab("complaints")}>
           Complaints
@@ -54,6 +75,18 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
           />
         </label>
         <div className="filter-grid">
+          <label className="field">
+            Area
+            <select value={filters.area} onChange={(event) => update("area", event.target.value)}>
+              <option value="">Any area</option>
+              {areas.map((area) => (
+                <option key={area} value={area}>
+                  {area}
+                </option>
+              ))}
+              {filters.area && !areas.includes(filters.area) && <option value={filters.area}>{filters.area}</option>}
+            </select>
+          </label>
           <label className="field">
             Category
             <select value={filters.category} onChange={(event) => update("category", event.target.value)}>
@@ -95,6 +128,9 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
           </label>
         </div>
         <div className="near-row">
+          <button className="button secondary" type="button" onClick={onLocate} disabled={locating || loading}>
+            {locating ? "Finding you…" : "Use my location"}
+          </button>
           <label>
             <input
               type="checkbox"
@@ -134,12 +170,13 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
                 <span className={`badge ${item.severity}`}>{item.severity}</span>
                 {item.department && <span className="status-chip">{item.department}</span>}
-                {item.priority && <span className={`badge ${item.priority}`}>{item.priority}</span>}
+                {item.priority && <span className="badge">priority {item.priority.score.toFixed(1)}</span>}
               </header>
               <h3>{labelize(item.issue_type)}</h3>
               <p>{item.description}</p>
               <div className="meta">
                 <span>{formatWhen(item.timestamp)}</span>
+                <span>{item.area || "Area unknown"}</span>
                 <span>
                   {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
                 </span>
@@ -167,9 +204,16 @@ export function Records({ filters, onFilters, onApply, complaints, incidents, lo
                 <span className="badge">{categoryLabel(item.issue_category)}</span>
                 <span className={`badge ${item.severity}`}>{item.severity}</span>
                 <span className="badge">{item.report_count} reports</span>
+                {item.priority && <span className="badge">priority {item.priority.score.toFixed(1)}</span>}
+                {item.status && <span className="badge">{statusLabel(item.status)}</span>}
+                {item.department && <span className="badge">{departmentLabel(item.department)}</span>}
               </header>
               <h3>{labelize(item.issue_type)}</h3>
               <div className="meta">
+                <span>{item.area || "Area unknown"}</span>
+                <span>
+                  {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
+                </span>
                 <span>First {formatWhen(item.first_reported_at)}</span>
                 <span>Latest {formatWhen(item.last_reported_at)}</span>
                 {item.distance_m != null && <span>{formatDistance(item.distance_m)} away</span>}

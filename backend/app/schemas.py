@@ -14,6 +14,7 @@ CATEGORIES = {
     "trees_parks",
     "encroachment",
     "pollution",
+    "traffic",
     "other",
 }
 
@@ -49,6 +50,12 @@ CATEGORY_ALIASES = {
     "encroachment": "encroachment",
     "noise": "pollution",
     "air": "pollution",
+    "signal": "traffic",
+    "signals": "traffic",
+    "traffic": "traffic",
+    "mosquito": "pollution",
+    "dengue": "pollution",
+    "toilet": "sewage",
 }
 
 SEVERITY_ALIASES = {

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import type { SubmitResult } from "@/lib/api";
+import { PriorityMeter } from "@/components/PriorityMeter";
 import { categoryLabel, formatDistance, formatGap, formatWhen, labelize } from "@/lib/format";
 
 type Props = {
@@ -72,7 +74,7 @@ export function ResultCard({ submitting, result, error }: Props) {
           {result.severity_score != null && result.priority && (
             <div className="meta" style={{ marginTop: 10 }}>
               <span className="badge">Severity {result.severity_score.toFixed(1)} / 10</span>
-              <span className={`badge ${result.priority}`}>{result.priority}</span>
+              <span className={`badge ${result.priority.urgent ? "critical" : ""}`}>Priority {result.priority.score.toFixed(1)}</span>
             </div>
           )}
           <p className="quiet">{result.features.visual_evidence}</p>
@@ -83,22 +85,14 @@ export function ResultCard({ submitting, result, error }: Props) {
             <span className={result.matched_existing ? "status-chip" : "status-chip new"}>
               {result.matched_existing ? "Existing incident" : "New incident"}
             </span>
-            {result.incident_id && (
-              <>
-                <code>{result.incident_id}</code>
-                <button
-                  className="ghost"
-                  type="button"
-                  onClick={() => {
-                    if (!result.incident_id) return;
-                    void navigator.clipboard.writeText(result.incident_id).catch(() => undefined);
-                  }}
-                >
-                  Copy
-                </button>
-              </>
+            {result.department_name && <span className="badge">{result.department_name}</span>}
+            {result.tracking_code && (
+              <Link href={`/track/${result.tracking_code}`}>{result.tracking_code}</Link>
             )}
+            {result.incident_tracking_code && <code>{result.incident_tracking_code}</code>}
           </div>
+          {result.routing_reason && <p className="explanation">{result.routing_reason}</p>}
+          {result.priority && <PriorityMeter priority={result.priority} />}
           <div className="metrics">
             <Metric
               label="Semantic similarity"
@@ -120,6 +114,11 @@ export function ResultCard({ submitting, result, error }: Props) {
             />
           </div>
           <p className="explanation">{result.explanation}</p>
+          {result.accepted && (
+            <p className="quiet">
+              <Link href="/complaints">See it among recent complaints</Link>
+            </p>
+          )}
           {result.timestamp && <p className="quiet">Filed {formatWhen(result.timestamp)} IST</p>}
           {result.embedding_dimensions != null && (
             <p className="quiet">Embedding dimension verified at {result.embedding_dimensions}.</p>
