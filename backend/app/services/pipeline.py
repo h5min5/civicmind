@@ -61,16 +61,17 @@ def submit_complaint(
         if area and not incident.area:
             incident.area = area
         if not incident.department:
-            department, reason = infer_department(incident.issue_category, incident.issue_type, original_text)
+            department, reason, confidence = infer_department(incident.issue_category, incident.issue_type, original_text)
             incident.department = department
             incident.routing_reason = reason
+            incident.routing_confidence = confidence
         if not incident.tracking_code:
             incident.tracking_code = incident_code(incident.id)
         if not incident.status:
             incident.status = "open"
         created = False
     else:
-        department, reason = infer_department(features.issue_category, features.issue_type, original_text)
+        department, reason, confidence = infer_department(features.issue_category, features.issue_type, original_text)
         incident_id = uuid.uuid4()
         incident = Incident(
             id=incident_id,
@@ -86,6 +87,7 @@ def submit_complaint(
             department=department,
             status="open",
             routing_reason=reason,
+            routing_confidence=confidence,
             tracking_code=incident_code(incident_id),
             reopen_count=0,
         )
@@ -117,6 +119,9 @@ def submit_complaint(
         citizen_id=citizen_id,
         language=language,
         tracking_code=complaint_code(complaint_id),
+        department=incident.department,
+        routing_reason=incident.routing_reason,
+        routing_confidence=incident.routing_confidence,
     )
     session.add(complaint)
     session.flush()

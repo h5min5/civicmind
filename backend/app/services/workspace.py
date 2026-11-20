@@ -28,7 +28,7 @@ SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 INCIDENT_SQL = """
 i.id, i.issue_category, i.issue_type, i.severity, i.latitude, i.longitude, i.area,
 i.department, i.status, i.resolved_at, i.first_reported_at, i.last_reported_at, i.report_count,
-i.routing_reason, i.summary, i.ai_summary, i.tracking_code, i.resolution_note, i.reopen_count
+i.routing_reason, i.routing_confidence, i.summary, i.ai_summary, i.tracking_code, i.resolution_note, i.reopen_count
 """
 
 
@@ -150,6 +150,7 @@ def issue_from_row(row, now: datetime | None = None) -> dict:
         "resolved_at": resolved.isoformat() if resolved else None,
         "report_count": int(row["report_count"]),
         "routing_reason": row["routing_reason"],
+        "routing_confidence": round(float(row["routing_confidence"]), 2) if row["routing_confidence"] is not None else None,
         "summary": row["summary"],
         "ai_summary": row["ai_summary"],
         "resolution_note": row["resolution_note"],
@@ -192,10 +193,11 @@ def refresh_summary(session: Session, incident: Incident) -> str:
 
 def finalize_submission(session: Session, incident: Incident, complaint: Complaint, explanation: str, created: bool) -> dict:
     if created or not incident.department:
-        department, reason = infer_department(incident.issue_category, incident.issue_type, complaint.original_text)
+        department, reason, confidence = infer_department(incident.issue_category, incident.issue_type, complaint.original_text)
         if created or incident.department is None:
             incident.department = department
             incident.routing_reason = reason
+            incident.routing_confidence = confidence
     if not incident.tracking_code:
         incident.tracking_code = incident_code(incident.id)
     if not incident.status:
@@ -248,6 +250,7 @@ def filter_issues(
     severity: str | None,
     query: str | None,
     priority_min: float | None,
+    unassigned_only: bool,
     sort: str,
     page: int,
     page_size: int,
@@ -269,6 +272,8 @@ def filter_issues(
         ]
     if priority_min is not None:
         found = [item for item in found if item["priority"]["score"] >= priority_min]
+    if unassigned_only:
+        found = [item for item in found if item["department"] is None]
     reverse = sort != "oldest"
     found = sorted(found, key=lambda item: _sort_key(item, sort), reverse=reverse)
     total = len(found)
@@ -433,6 +438,7 @@ def update_incident(session: Session, incident: Incident, user: User, payload: d
         previous = department_name(incident.department)
         incident.department = department
         incident.routing_reason = note or f"Reassigned by {user.name}."
+        incident.routing_confidence = 1.0
         add_event(
             session,
             incident.id,

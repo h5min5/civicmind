@@ -92,6 +92,7 @@ export function ResultCard({ submitting, result, error }: Props) {
             {result.incident_tracking_code && <code>{result.incident_tracking_code}</code>}
           </div>
           {result.routing_reason && <p className="explanation">{result.routing_reason}</p>}
+          {result.routing_confidence != null && <p className="quiet">Routing confidence: {Math.round(result.routing_confidence * 100)}%</p>}
           {result.priority && <PriorityMeter priority={result.priority} />}
           <div className="metrics">
             <Metric

@@ -85,6 +85,7 @@ export function CommandCenter() {
   const [severity, setSeverity] = useState("");
   const [sort, setSort] = useState("priority");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [alerts, setAlerts] = useState<{ kind: string; title: string; detail: string; incident_id: string | null }[]>([]);
@@ -107,6 +108,7 @@ export function CommandCenter() {
     if (status) params.set("status", status);
     if (severity) params.set("severity", severity);
     if (urgentOnly) params.set("priority_min", "8");
+    if (unassignedOnly) params.set("unassigned_only", "true");
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -126,7 +128,7 @@ export function CommandCenter() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [allowed, scope, page, query, status, severity, sort, urgentOnly, reloadKey]);
+  }, [allowed, scope, page, query, status, severity, sort, urgentOnly, unassignedOnly, reloadKey]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -155,6 +157,7 @@ export function CommandCenter() {
     setStatus("");
     setSeverity("");
     setUrgentOnly(false);
+    setUnassignedOnly(false);
     setPage(1);
   }
 
@@ -308,6 +311,10 @@ export function CommandCenter() {
                 <input type="checkbox" checked={urgentOnly} onChange={(event) => { setUrgentOnly(event.target.checked); setPage(1); }} />
                 Urgent only
               </label>
+              <label className="check-line">
+                <input type="checkbox" checked={unassignedOnly} onChange={(event) => { setUnassignedOnly(event.target.checked); setPage(1); }} />
+                Unassigned queue
+              </label>
               <button type="button" className="ghost" onClick={clearFilters}>Clear</button>
             </form>
             {view === "map" && (
@@ -403,7 +410,10 @@ function IncidentTable({
           <span className="prio">{item.priority.score.toFixed(1)}</span>
           <span>{item.report_count}</span>
           <span>{statusLabel(item.status)}</span>
-          <span>{departmentLabel(item.department)}</span>
+          <span>
+            {departmentLabel(item.department)}
+            {item.routing_confidence != null && <small>{Math.round(item.routing_confidence * 100)}% route</small>}
+          </span>
         </article>
       ))}
     </div>
@@ -503,7 +513,10 @@ function IncidentDrawer({
       <p>{detail.summary}</p>
       {detail.ai_summary && <p className="explanation">{detail.ai_summary}</p>}
       <PriorityMeter priority={detail.priority} />
-      <p className="hint">{detail.routing_reason}</p>
+      <p className="hint">
+        {detail.routing_reason}
+        {detail.routing_confidence != null && ` Routing confidence: ${Math.round(detail.routing_confidence * 100)}%.`}
+      </p>
       <div className="row-actions">
         <a className="button secondary" href={directionsLink(detail.latitude, detail.longitude)} target="_blank" rel="noreferrer">Navigate</a>
         <button className="ghost" type="button" onClick={() => void summarizeIncident(detail.id).then((body) => onChange({ ...detail, ai_summary: body.ai_summary }))}>

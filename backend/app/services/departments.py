@@ -121,19 +121,19 @@ def department_name(department_id: str | None) -> str:
     return item.name if item else department_id
 
 
-def infer_department(category: str | None, issue_type: str | None, text: str | None) -> tuple[str | None, str]:
-    """Route from the civic category first, then from explicit phrases when the category is ambiguous."""
+def infer_department(category: str | None, issue_type: str | None, text: str | None) -> tuple[str | None, str, float]:
+    """Return department, explanation, and routing confidence from 0 to 1."""
     mapped = department_for_category(category)
     if mapped:
         name = department_name(mapped)
-        return mapped, f"Category '{category}' is handled by {name}."
+        return mapped, f"Category '{category}' is handled by {name}.", 0.95
     haystack = " ".join(part for part in (issue_type or "", text or "") if part).lower().replace("_", " ")
     for phrases, department_id in _PHRASES:
         hit = next((phrase for phrase in phrases if phrase in haystack), None)
         if hit:
             name = department_name(department_id)
-            return department_id, f"The category was ambiguous, but the report mentions '{hit}', which is handled by {name}."
-    return None, "No department rule matched this report. It stays unassigned until an administrator routes it."
+            return department_id, f"The category was ambiguous, but the report mentions '{hit}', which is handled by {name}.", 0.82
+    return None, "No department rule matched this report. It stays unassigned until an administrator routes it.", 0.0
 
 
 def catalog() -> list[dict]:

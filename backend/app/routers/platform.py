@@ -318,6 +318,7 @@ def authority_incidents(
     severity: str | None = None,
     q: str | None = None,
     priority_min: float | None = Query(default=None, ge=0, le=10),
+    unassigned_only: bool = False,
     sort: str = "priority",
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
@@ -338,6 +339,7 @@ def authority_incidents(
             severity=severity,
             query=(q or "").strip() or None,
             priority_min=priority_min,
+            unassigned_only=unassigned_only,
             sort=sort,
             page=page,
             page_size=page_size,
@@ -529,7 +531,7 @@ def export_csv(
     def work(session):
         user = _authority(session, authorization)
         issues = load_issues(session, _scope(user, department))
-        chosen = filter_issues(issues, status=status, severity=None, query=None, priority_min=None, sort="priority", page=1, page_size=5000)
+        chosen = filter_issues(issues, status=status, severity=None, query=None, priority_min=None, unassigned_only=False, sort="priority", page=1, page_size=5000)
         columns = list(export_rows(chosen["issues"])[:1][0].keys()) if chosen["issues"] else [
             "tracking_code",
             "department",
@@ -560,7 +562,7 @@ def export_pdf(
         scope = _scope(user, department)
         board = overview(session, scope)
         issues = load_issues(session, scope)
-        chosen = filter_issues(issues, status=status, severity=None, query=None, priority_min=None, sort="priority", page=1, page_size=40)
+        chosen = filter_issues(issues, status=status, severity=None, query=None, priority_min=None, unassigned_only=False, sort="priority", page=1, page_size=40)
         lines = [
             "CivicMind operational report",
             board["department_name"],

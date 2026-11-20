@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.services.departments import department_for_category
+from app.services.departments import department_for_category, infer_department
 from app.services.priority import combine, duration_score, location_score, priority_for_incident, volume_score
 
 
@@ -15,6 +15,17 @@ class DepartmentRoutingTests(unittest.TestCase):
     def test_other_is_not_forced_onto_a_desk(self):
         self.assertIsNone(department_for_category("other"))
         self.assertIsNone(department_for_category(None))
+
+    def test_routing_confidence_marks_category_phrase_and_unmatched_reports(self):
+        department, _reason, confidence = infer_department("road", "pothole", "A pothole")
+        self.assertEqual(department, "roads_infra")
+        self.assertEqual(confidence, 0.95)
+        department, _reason, confidence = infer_department(None, "pipe leak", "Water is leaking")
+        self.assertEqual(department, "water_supply")
+        self.assertEqual(confidence, 0.82)
+        department, _reason, confidence = infer_department("other", "unknown issue", "Some unclear problem")
+        self.assertIsNone(department)
+        self.assertEqual(confidence, 0.0)
 
 
 class PriorityTests(unittest.TestCase):

@@ -69,6 +69,7 @@ export type SubmitResult = {
   department?: string | null;
   department_name?: string | null;
   routing_reason?: string | null;
+  routing_confidence?: number | null;
   area?: string | null;
   summary?: string | null;
   priority?: PriorityScore | null;
@@ -259,6 +260,7 @@ export type AuthorityIssue = {
   resolved_at: string | null;
   report_count: number;
   routing_reason: string | null;
+  routing_confidence: number | null;
   summary: string | null;
   ai_summary: string | null;
   resolution_note: string | null;

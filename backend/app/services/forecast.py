@@ -212,7 +212,7 @@ def routing_agreement(rows: list[dict] | None = None) -> dict:
         expected = ARCHIVE_DEPARTMENT.get(row["department"])
         if not expected:
             continue
-        predicted, _reason = infer_department(None, "", row["category"])
+        predicted, _reason, _confidence = infer_department(None, "", row["category"])
         compared += 1
         ok = predicted == expected
         matched += int(ok)

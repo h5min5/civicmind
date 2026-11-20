@@ -84,6 +84,7 @@ export default function TrackPage() {
           </div>
           <p>{detail.summary}</p>
           {detail.routing_reason && <p className="explanation">{detail.routing_reason}</p>}
+          {detail.routing_confidence != null && <p className="quiet">Routing confidence: {Math.round(detail.routing_confidence * 100)}%</p>}
           <PriorityMeter priority={detail.priority} />
           <h3>Timeline</h3>
           <ol className="timeline">
