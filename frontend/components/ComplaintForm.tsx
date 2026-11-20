@@ -257,7 +257,7 @@ export function ComplaintForm({ submitting, coords, onCoords, onSubmit }: Props)
         </button>
         {coords && (
           <p className="coords">
-            <strong>{coords.area || "Area name unavailable"}</strong>
+            <strong>{coords.area || "Street name unavailable"}</strong>
             <span>Latitude {coords.latitude.toFixed(5)}</span>
             <span>Longitude {coords.longitude.toFixed(5)}</span>
             {coords.accuracy != null && <span>Accuracy ±{Math.round(coords.accuracy)} m</span>}

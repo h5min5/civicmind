@@ -54,6 +54,36 @@ def pick_area(address: dict) -> str | None:
     return None
 
 
+def _street(address: dict) -> str | None:
+    road = None
+    for key in ("road", "pedestrian", "footway", "path"):
+        road = _clean(address.get(key))
+        if road:
+            break
+    number = _clean(address.get("house_number"))
+    if number and road:
+        return f"{number}, {road}"
+    return road or number
+
+
+def pick_place(address: dict) -> str | None:
+    """Street first, then the neighbourhood, so a pin names the road it sits on."""
+    street = _street(address)
+    locality = pick_area(address)
+    suburb = _clean(address.get("suburb"))
+    parts: list[str] = []
+    for value in (street, locality, suburb):
+        if not value:
+            continue
+        folded = value.lower()
+        if any(folded == part.lower() or folded in part.lower() for part in parts):
+            continue
+        parts.append(value)
+    if not parts:
+        return None
+    return ", ".join(parts)[:120]
+
+
 def ensure_areas(session: Session) -> None:
     """Fill missing area names for reports saved before the area column existed."""
     with _lock:
@@ -118,7 +148,7 @@ def lookup_area(latitude: float, longitude: float) -> str | None:
 
 
 def _lookup_locked(latitude: float, longitude: float) -> str | None:
-    key = (round(latitude, 4), round(longitude, 4))
+    key = (round(latitude, 5), round(longitude, 5))
     if key in _cache:
         return _cache[key]
     _pace()
@@ -159,4 +189,4 @@ def _fetch(latitude: float, longitude: float) -> str | None:
     address = response.json().get("address")
     if not isinstance(address, dict):
         return None
-    return pick_area(address)
+    return pick_place(address)

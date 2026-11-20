@@ -4,14 +4,17 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import type { CircleMarker, Map as LeafletMap } from "leaflet";
 import { lookupArea } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
 import type { Coords } from "@/lib/locate";
 
 const MUMBAI: L.LatLngExpression = [19.076, 72.8777];
 
 export function LocationPicker({ coords, onChange }: { coords: Coords | null; onChange: (coords: Coords) => void }) {
+  const { t } = useLocale();
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerRef = useRef<CircleMarker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
   const onChangeRef = useRef(onChange);
   const initialRef = useRef(coords);
   onChangeRef.current = onChange;
@@ -51,6 +54,7 @@ export function LocationPicker({ coords, onChange }: { coords: Coords | null; on
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
+      circleRef.current = null;
     };
   }, []);
 
@@ -74,13 +78,33 @@ export function LocationPicker({ coords, onChange }: { coords: Coords | null; on
     } else {
       markerRef.current.setLatLng(latlng);
     }
-    if (!map.getBounds().contains(latlng)) map.setView(latlng, Math.max(map.getZoom(), 15));
+    const accurate = coords.accuracy != null && coords.accuracy > 0 && coords.accuracy <= 400;
+    if (accurate) {
+      if (!circleRef.current) {
+        circleRef.current = L.circle(latlng, {
+          radius: coords.accuracy ?? 0,
+          color: "#3ddc84",
+          weight: 1,
+          fillColor: "#3ddc84",
+          fillOpacity: 0.12,
+        }).addTo(map);
+      } else {
+        circleRef.current.setLatLng(latlng);
+        circleRef.current.setRadius(coords.accuracy ?? 0);
+      }
+    } else {
+      circleRef.current?.remove();
+      circleRef.current = null;
+    }
+    if (coords.accuracy != null) map.setView(latlng, 18);
+    else if (map.getZoom() < 16) map.setView(latlng, 17);
+    else if (!map.getBounds().contains(latlng)) map.setView(latlng, Math.max(map.getZoom(), 17));
   }, [coords]);
 
   return (
     <div className="map-block">
       <div ref={host} className="map-frame picker-map" role="application" aria-label="Map for choosing the complaint location" />
-      <p className="hint">Drop a pin if GPS is off. The server stamps the time when the complaint is accepted.</p>
+      <p className="hint">{t("form.pinHint")}</p>
     </div>
   );
 }
